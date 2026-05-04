@@ -1,0 +1,29 @@
+## Comandos listos para copiar
+
+### levantar PostgreSQL y API
+
+```powershell
+cd C:\Programación\Programacion4\ProyectoFinal\INTEGRADOR_FOOD_STORE
+docker compose up -d
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload
+```
+
+cd frontend
+python -m http.server 5500
+
+### ejecutar la demo de creación por API
+
+```powershell
+cd C:\Programación\Programacion4\ProyectoFinal\INTEGRADOR_FOOD_STORE
+.\scripts\demo\run_demo_requests.ps1
+.\scripts\demo\show_db_state.ps1
+```
+
+### mostrar tablas en PostgreSQL
+
+```powershell
+cd C:\Programación\Programacion4\ProyectoFinal\INTEGRADOR_FOOD_STORE
+.\scripts\demo\show_db_state.ps1
+```
+
+//

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Food Store | Login</title>
+    <link rel="stylesheet" href="../css/styles.css" />
+  </head>
+  <body class="page-shell auth-shell">
+    <main class="card auth-card">
+      <p class="eyebrow">Acceso al sistema</p>
+      <h1>Login</h1>
+      <p class="muted">Usá tus credenciales para ingresar al panel.</p>
+      <p id="demoHint" class="muted"></p>
+
+      <form id="loginForm" class="form-grid">
+        <label>
+          Usuario
+          <input type="text" id="username" name="username" required autocomplete="username" />
+        </label>
+
+        <label>
+          Contraseña
+          <input type="password" id="password" name="password" required autocomplete="current-password" />
+        </label>
+
+        <button class="button button-primary" type="submit">Ingresar</button>
+      </form>
+
+      <p id="loginMessage" class="feedback" aria-live="polite"></p>
+    </main>
+
+    <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+  </body>
+</html>

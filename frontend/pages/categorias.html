@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Food Store | Categorías</title>
+    <link rel="stylesheet" href="../css/styles.css" />
+  </head>
+  <body class="page-shell">
+    <main class="card content-card">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">CRUD de categorías</p>
+          <h1>Categorías</h1>
+        </div>
+        <div class="header-actions">
+          <a class="button button-secondary" href="menu.html">Volver al menú</a>
+          <button class="button button-primary" id="newCategoriaBtn" type="button">Nueva categoría</button>
+        </div>
+      </header>
+
+      <section class="controls-card">
+        <div class="filters-grid">
+          <label>
+            Buscar por texto
+            <input type="search" id="categoriaFilterText" placeholder="Nombre o descripción" />
+          </label>
+
+          <label>
+            Descripción
+            <input type="search" id="categoriaFilterDescripcion" placeholder="Contiene texto" />
+          </label>
+
+          <label>
+            Orden mínimo
+            <input type="number" id="categoriaFilterOrdenMin" min="0" placeholder="0" />
+          </label>
+        </div>
+
+        <div class="filters-actions">
+          <button class="button button-secondary small-button" id="categoriaResetFiltersBtn" type="button">Limpiar filtros</button>
+          <span id="categoriasFilteredLabel" class="muted"></span>
+        </div>
+      </section>
+
+      <form id="categoriaForm" class="form-grid hidden">
+        <input type="hidden" id="categoriaId" />
+
+        <label>
+          Nombre
+          <input type="text" id="categoriaNombre" required maxlength="100" />
+        </label>
+
+        <label>
+          Descripción
+          <textarea id="categoriaDescripcion" rows="3"></textarea>
+        </label>
+
+        <label>
+          Orden de display
+          <input type="number" id="categoriaOrden" min="0" value="0" />
+        </label>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit">Guardar</button>
+          <button class="button button-secondary" id="cancelCategoriaBtn" type="button">Cancelar</button>
+        </div>
+      </form>
+
+      <section class="table-card">
+        <div class="table-header">
+          <h2>Listado</h2>
+          <span id="categoriasTotalLabel" class="muted"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Orden</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="categoriasTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="pagination-bar">
+          <button class="button button-secondary small-button" id="categoriasPrevPageBtn" type="button">Anterior</button>
+          <span id="categoriasPageInfo" class="pagination-info"></span>
+          <button class="button button-secondary small-button" id="categoriasNextPageBtn" type="button">Siguiente</button>
+        </div>
+      </section>
+
+      <p id="categoriasMessage" class="feedback" aria-live="polite"></p>
+    </main>
+
+    <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/list-utils.js"></script>
+    <script src="../js/ui.js"></script>
+    <script src="../js/categorias.js"></script>
+  </body>
+</html>

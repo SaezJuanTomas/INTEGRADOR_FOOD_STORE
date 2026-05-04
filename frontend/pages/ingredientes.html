@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Food Store | Ingredientes</title>
+    <link rel="stylesheet" href="../css/styles.css" />
+  </head>
+  <body class="page-shell">
+    <main class="card content-card">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">CRUD de ingredientes</p>
+          <h1>Ingredientes</h1>
+        </div>
+        <div class="header-actions">
+          <a class="button button-secondary" href="menu.html">Volver al menú</a>
+          <button class="button button-primary" id="newIngredienteBtn" type="button">Nuevo ingrediente</button>
+        </div>
+      </header>
+
+      <section class="controls-card">
+        <div class="filters-grid">
+          <label>
+            Buscar por texto
+            <input type="search" id="ingredienteFilterText" placeholder="Nombre o descripción" />
+          </label>
+
+          <label>
+            Descripción
+            <input type="search" id="ingredienteFilterDescripcion" placeholder="Contiene texto" />
+          </label>
+
+          <label>
+            Alérgeno
+            <select id="ingredienteFilterAlergeno">
+              <option value="all">Todos</option>
+              <option value="yes">Sí</option>
+              <option value="no">No</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="filters-actions">
+          <button class="button button-secondary small-button" id="ingredienteResetFiltersBtn" type="button">Limpiar filtros</button>
+          <span id="ingredientesFilteredLabel" class="muted"></span>
+        </div>
+      </section>
+
+      <form id="ingredienteForm" class="form-grid hidden">
+        <input type="hidden" id="ingredienteId" />
+
+        <label>
+          Nombre
+          <input type="text" id="ingredienteNombre" required maxlength="100" />
+        </label>
+
+        <label>
+          Descripción
+          <textarea id="ingredienteDescripcion" rows="3"></textarea>
+        </label>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="ingredienteAlergeno" />
+          Es alérgeno
+        </label>
+
+        <div class="form-actions">
+          <button class="button button-primary" type="submit">Guardar</button>
+          <button class="button button-secondary" id="cancelIngredienteBtn" type="button">Cancelar</button>
+        </div>
+      </form>
+
+      <section class="table-card">
+        <div class="table-header">
+          <h2>Listado</h2>
+          <span id="ingredientesTotalLabel" class="muted"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Descripción</th>
+                <th>Alérgeno</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="ingredientesTableBody"></tbody>
+          </table>
+        </div>
+
+        <div class="pagination-bar">
+          <button class="button button-secondary small-button" id="ingredientesPrevPageBtn" type="button">Anterior</button>
+          <span id="ingredientesPageInfo" class="pagination-info"></span>
+          <button class="button button-secondary small-button" id="ingredientesNextPageBtn" type="button">Siguiente</button>
+        </div>
+      </section>
+
+      <p id="ingredientesMessage" class="feedback" aria-live="polite"></p>
+    </main>
+
+    <script src="../js/config.js"></script>
+    <script src="../js/auth.js"></script>
+    <script src="../js/list-utils.js"></script>
+    <script src="../js/ui.js"></script>
+    <script src="../js/ingredientes.js"></script>
+  </body>
+</html>
