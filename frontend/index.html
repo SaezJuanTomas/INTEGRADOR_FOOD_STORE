@@ -3,20 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Food Store</title>
-    <link rel="stylesheet" href="css/styles.css" />
+    <title>Food Store Frontend</title>
+    <script src="https://cdn.tailwindcss.com"></script>
   </head>
-  <body class="page-shell">
-    <main class="card hero-card">
-      <p class="eyebrow">Food Store</p>
-      <h1>Frontend simple para el TP</h1>
-      <p>
-        Ingresá al sistema para administrar insumos, productos y categorías.
-      </p>
-      <div class="actions">
-        <a class="button button-primary" href="pages/login.html">Ir al login</a>
-        <a class="button button-secondary" href="pages/menu.html">Ir al menú</a>
-      </div>
-    </main>
+  <body class="bg-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

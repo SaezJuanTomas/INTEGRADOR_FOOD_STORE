@@ -8,8 +8,19 @@ docker compose up -d
 .\.venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-cd frontend
-python -m http.server 5500
+### LEVANTAR FRONT
+
+```powershell
+cd C:\Programación\Programacion4\ProyectoFinal\INTEGRADOR_FOOD_STORE\frontend; npm run dev
+```
+
+Nota: Ejecutar `npm install` solo la primera vez o si cambias dependencias
+
+Abrir en Edge:
+
+```powershell
+start msedge http://localhost:5500/login
+```
 
 ### ejecutar la demo de creación por API
 
