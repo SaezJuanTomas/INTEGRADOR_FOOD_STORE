@@ -30,7 +30,7 @@ $ing1 = Invoke-RestMethod -Method Post -Uri "$baseUrl/ingredientes/" -ContentTyp
 $ing2 = Invoke-RestMethod -Method Post -Uri "$baseUrl/ingredientes/" -ContentType "application/json" -Body $ing2Body
 Write-Host "Ingredientes creados -> IDs: $($ing1.id), $($ing2.id)" -ForegroundColor Green
 
-# 3) Producto (incluye categoria_id + ingrediente_ids)
+# 3) Producto (incluye categoria_id + ingredientes con cantidad y unidad)
 $productoBody = @{
     nombre = "Pizza Muzzarella"
     descripcion = "Muzzarella clasica"
@@ -39,7 +39,22 @@ $productoBody = @{
     tiempo_prep_min = 15
     disponible = $true
     categoria_id = $categoria.id
-    ingrediente_ids = @($ing1.id, $ing2.id)
+    ingredientes = @(
+        @{
+            ingrediente_id = $ing1.id
+            cantidad = 500
+            unidad = "gramos"
+            es_removible = $true
+            es_opcional = $false
+        },
+        @{
+            ingrediente_id = $ing2.id
+            cantidad = 100
+            unidad = "gramos"
+            es_removible = $true
+            es_opcional = $false
+        }
+    )
 } | ConvertTo-Json
 
 $producto = Invoke-RestMethod -Method Post -Uri "$baseUrl/productos/" -ContentType "application/json" -Body $productoBody

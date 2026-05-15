@@ -1,7 +1,19 @@
 from decimal import Decimal
+from datetime import datetime
 from typing import List, Optional
 
 from sqlmodel import Field, SQLModel
+
+from app.models.producto_ingrediente import UnidadEnum
+
+
+class ProductoIngredienteSchema(SQLModel):
+    """Schema para ingrediente dentro de un producto."""
+    ingrediente_id: int
+    cantidad: float = Field(gt=0)
+    unidad: UnidadEnum = Field(default=UnidadEnum.GRAMOS)
+    es_removible: bool = True
+    es_opcional: bool = False
 
 
 class ProductoCreate(SQLModel):
@@ -11,8 +23,11 @@ class ProductoCreate(SQLModel):
     imagenes_url: Optional[str] = None
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0)
     disponible: bool = True
+    usa_stock_manual: bool = False
+    stock_manual: Optional[int] = Field(default=None, ge=0)
+    costo_compra_manual: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=4)
     categoria_id: Optional[int] = None
-    ingrediente_ids: List[int] = Field(default_factory=list)
+    ingredientes: List[ProductoIngredienteSchema] = Field(default_factory=list)
 
 
 class ProductoUpdate(SQLModel):
@@ -22,8 +37,11 @@ class ProductoUpdate(SQLModel):
     imagenes_url: Optional[str] = None
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0)
     disponible: Optional[bool] = None
+    usa_stock_manual: Optional[bool] = None
+    stock_manual: Optional[int] = Field(default=None, ge=0)
+    costo_compra_manual: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=4)
     categoria_id: Optional[int] = None
-    ingrediente_ids: Optional[List[int]] = None
+    ingredientes: Optional[List[ProductoIngredienteSchema]] = None
 
 
 class ProductoPublic(SQLModel):
@@ -34,8 +52,18 @@ class ProductoPublic(SQLModel):
     imagenes_url: Optional[str] = None
     tiempo_prep_min: Optional[int] = None
     disponible: bool
+    usa_stock_manual: bool
+    stock_manual: Optional[int] = None
+    costo_compra_manual: Optional[Decimal] = None
     categoria_id: Optional[int] = None
-    ingrediente_ids: List[int] = Field(default_factory=list)
+    categoria_nombre: Optional[str] = None
+    ingredientes: List[ProductoIngredienteSchema] = Field(default_factory=list)
+    stock_disponible: Optional[int] = None
+    costo_total_ingredientes: Decimal = Field(default=Decimal("0"), max_digits=12, decimal_places=4)
+    precio_sugerido: Decimal = Field(default=Decimal("0"), max_digits=12, decimal_places=4)
+    margen_estimado: Decimal = Field(default=Decimal("0"), max_digits=12, decimal_places=4)
+    activo: bool
+    deleted_at: Optional[datetime] = None
 
 
 class ProductoList(SQLModel):

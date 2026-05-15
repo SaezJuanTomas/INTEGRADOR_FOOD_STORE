@@ -1,7 +1,7 @@
 from sqlmodel import Session, func, select
 
 from app.core.repository import BaseRepository
-from app.models import Ingrediente
+from app.models import Ingrediente, Producto, ProductoIngrediente
 
 
 class IngredienteRepository(BaseRepository[Ingrediente]):
@@ -24,7 +24,7 @@ class IngredienteRepository(BaseRepository[Ingrediente]):
         """Obtener ingredientes no eliminados con paginación."""
         statement = (
             select(Ingrediente)
-            .where(Ingrediente.deleted_at.is_(None))
+            .where(Ingrediente.deleted_at.is_(None), Ingrediente.activo.is_(True))
             .offset(offset)
             .limit(limit)
         )
@@ -33,11 +33,46 @@ class IngredienteRepository(BaseRepository[Ingrediente]):
     def count_active(self) -> int:
         """Contar ingredientes no eliminados."""
         statement = select(func.count()).select_from(Ingrediente).where(
-            Ingrediente.deleted_at.is_(None)
+            Ingrediente.deleted_at.is_(None),
+            Ingrediente.activo.is_(True),
         )
         return self.session.exec(statement).one()
 
     def get_alergenos(self) -> list[Ingrediente]:
         """Obtener todos los alérgenos."""
-        statement = select(Ingrediente).where(Ingrediente.es_alergeno == True)
+        statement = select(Ingrediente).where(
+            Ingrediente.es_alergeno.is_(True),
+            Ingrediente.deleted_at.is_(None),
+            Ingrediente.activo.is_(True),
+        )
         return self.session.exec(statement).all()
+
+    def get_all_paginated(
+        self, offset: int = 0, limit: int = 20
+    ) -> list[Ingrediente]:
+        """Obtener TODOS los ingredientes (incluyendo deletedados) con paginación."""
+        statement = (
+            select(Ingrediente)
+            .offset(offset)
+            .limit(limit)
+        )
+        return self.session.exec(statement).all()
+
+    def count_all(self) -> int:
+        """Contar TODOS los ingredientes (incluyendo deletedados)."""
+        statement = select(func.count()).select_from(Ingrediente)
+        return self.session.exec(statement).one()
+
+    def has_active_product_usage(self, ingrediente_id: int) -> bool:
+        """Indicar si el ingrediente está asociado a productos activos."""
+        statement = (
+            select(func.count())
+            .select_from(ProductoIngrediente)
+            .join(Producto, Producto.id == ProductoIngrediente.producto_id)
+            .where(
+                ProductoIngrediente.ingrediente_id == ingrediente_id,
+                Producto.deleted_at.is_(None),
+                Producto.activo.is_(True),
+            )
+        )
+        return self.session.exec(statement).one() > 0

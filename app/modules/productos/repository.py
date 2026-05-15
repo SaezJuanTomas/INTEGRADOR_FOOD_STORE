@@ -25,7 +25,7 @@ class ProductoRepository(BaseRepository[Producto]):
         """Obtener productos no eliminados con paginación."""
         statement = (
             select(Producto)
-            .where(Producto.deleted_at.is_(None))
+            .where(Producto.deleted_at.is_(None), Producto.activo.is_(True))
             .offset(offset)
             .limit(limit)
         )
@@ -34,7 +34,8 @@ class ProductoRepository(BaseRepository[Producto]):
     def count_active(self) -> int:
         """Contar productos no eliminados."""
         statement = select(func.count()).select_from(Producto).where(
-            Producto.deleted_at.is_(None)
+            Producto.deleted_at.is_(None),
+            Producto.activo.is_(True),
         )
         return self.session.exec(statement).one()
 
@@ -51,19 +52,38 @@ class ProductoRepository(BaseRepository[Producto]):
             )
         )
 
-    def set_ingredientes(self, producto_id: int, ingrediente_ids: list[int]) -> None:
-        """Reemplazar ingredientes asociados del producto."""
+    def clear_categoria_principal(self, producto_id: int) -> None:
+        """Eliminar cualquier relación de categoría principal del producto."""
+        self.session.query(ProductoCategoria).filter(
+            ProductoCategoria.producto_id == producto_id
+        ).delete()
+
+    def set_ingredientes(self, producto_id: int, ingredientes: list[dict]) -> None:
+        """
+        Reemplazar ingredientes asociados del producto.
+        
+        Args:
+            producto_id: ID del producto
+            ingredientes: Lista de dicts con:
+                - ingrediente_id: int
+                - cantidad: float
+                - unidad: "gramos" o "litros"
+                - es_removible: bool (opcional, default=True)
+                - es_opcional: bool (opcional, default=False)
+        """
         self.session.query(ProductoIngrediente).filter(
             ProductoIngrediente.producto_id == producto_id
         ).delete()
 
-        for ingrediente_id in ingrediente_ids:
+        for ing in ingredientes:
             self.session.add(
                 ProductoIngrediente(
                     producto_id=producto_id,
-                    ingrediente_id=ingrediente_id,
-                    es_removible=True,
-                    es_opcional=False,
+                    ingrediente_id=ing["ingrediente_id"],
+                    cantidad=ing["cantidad"],
+                    unidad=ing.get("unidad", "gramos"),
+                    es_removible=ing.get("es_removible", True),
+                    es_opcional=ing.get("es_opcional", False),
                 )
             )
 
@@ -71,7 +91,7 @@ class ProductoRepository(BaseRepository[Producto]):
         """Obtener todos los productos disponibles."""
         statement = (
             select(Producto)
-            .where(Producto.disponible == True)
+            .where(Producto.disponible.is_(True), Producto.deleted_at.is_(None), Producto.activo.is_(True))
             .offset(offset)
             .limit(limit)
         )
@@ -82,6 +102,23 @@ class ProductoRepository(BaseRepository[Producto]):
     ) -> list[Producto]:
         """Obtener productos dentro de un rango de precio."""
         statement = select(Producto).where(
-            Producto.precio_base >= min_precio, Producto.precio_base <= max_precio
+            Producto.precio_base >= min_precio,
+            Producto.precio_base <= max_precio,
+            Producto.deleted_at.is_(None),
+            Producto.activo.is_(True),
         )
         return self.session.exec(statement).all()
+
+    def get_all_paginated(self, offset: int = 0, limit: int = 20) -> list[Producto]:
+        """Obtener TODOS los productos (incluyendo deletedados) con paginación."""
+        statement = (
+            select(Producto)
+            .offset(offset)
+            .limit(limit)
+        )
+        return self.session.exec(statement).all()
+
+    def count_all(self) -> int:
+        """Contar TODOS los productos (incluyendo deletedados)."""
+        statement = select(func.count()).select_from(Producto)
+        return self.session.exec(statement).one()

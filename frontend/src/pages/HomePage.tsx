@@ -6,7 +6,7 @@ export function HomePage(): JSX.Element {
         <p className="mt-2 text-orange-700">Gestión de productos, categorías e ingredientes</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <a
           href="/categorias"
           className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-amber-50 p-6 shadow-md transition hover:shadow-lg hover:border-orange-200"
@@ -29,6 +29,14 @@ export function HomePage(): JSX.Element {
         >
           <h2 className="mb-2 text-2xl font-bold text-orange-900">🧂 Ingredientes</h2>
           <p className="text-orange-800">Administra ingredientes y marca cuáles son alérgenos para garantizar la seguridad del cliente.</p>
+        </a>
+
+        <a
+          href="/ventas"
+          className="rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 to-amber-50 p-6 shadow-md transition hover:shadow-lg hover:border-orange-200"
+        >
+          <h2 className="mb-2 text-2xl font-bold text-orange-900">💰 Ventas</h2>
+          <p className="text-orange-800">Vista base para preparar carrito, checkout y métricas de venta en próximas entregas.</p>
         </a>
       </div>
     </div>

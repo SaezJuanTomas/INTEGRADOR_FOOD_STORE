@@ -4,6 +4,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.modules.categorias.schemas import (
     CategoriaCreate,
+    CategoriaDetail,
     CategoriaList,
     CategoriaPublic,
     CategoriaUpdate,
@@ -29,9 +30,10 @@ def create_categoria(
 def list_categorias(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    include_deleted: bool = Query(default=False),
     svc: CategoriaService = Depends(get_categoria_service),
 ) -> CategoriaList:
-    return svc.get_all(offset=offset, limit=limit)
+    return svc.get_all(offset=offset, limit=limit, include_deleted=include_deleted)
 
 
 @router.get("/{categoria_id}", response_model=CategoriaPublic)
@@ -40,6 +42,14 @@ def get_categoria(
     svc: CategoriaService = Depends(get_categoria_service),
 ) -> CategoriaPublic:
     return svc.get_by_id(categoria_id)
+
+
+@router.get("/{categoria_id}/detail", response_model=CategoriaDetail)
+def get_categoria_detail(
+    categoria_id: int,
+    svc: CategoriaService = Depends(get_categoria_service),
+) -> CategoriaDetail:
+    return svc.get_detail(categoria_id)
 
 
 @router.patch("/{categoria_id}", response_model=CategoriaPublic)
@@ -57,3 +67,11 @@ def delete_categoria(
     svc: CategoriaService = Depends(get_categoria_service),
 ) -> None:
     svc.soft_delete(categoria_id)
+
+
+@router.patch("/{categoria_id}/restore", response_model=CategoriaPublic)
+def restore_categoria(
+    categoria_id: int,
+    svc: CategoriaService = Depends(get_categoria_service),
+) -> CategoriaPublic:
+    return svc.restore(categoria_id)

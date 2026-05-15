@@ -4,6 +4,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.modules.ingredientes.schemas import (
     IngredienteCreate,
+    IngredienteDetail,
     IngredienteList,
     IngredientePublic,
     IngredienteUpdate,
@@ -29,9 +30,10 @@ def create_ingrediente(
 def list_ingredientes(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    include_deleted: bool = Query(default=False),
     svc: IngredienteService = Depends(get_ingrediente_service),
 ) -> IngredienteList:
-    return svc.get_all(offset=offset, limit=limit)
+    return svc.get_all(offset=offset, limit=limit, include_deleted=include_deleted)
 
 
 @router.get("/{ingrediente_id}", response_model=IngredientePublic)
@@ -40,6 +42,14 @@ def get_ingrediente(
     svc: IngredienteService = Depends(get_ingrediente_service),
 ) -> IngredientePublic:
     return svc.get_by_id(ingrediente_id)
+
+
+@router.get("/{ingrediente_id}/detail", response_model=IngredienteDetail)
+def get_ingrediente_detail(
+    ingrediente_id: int,
+    svc: IngredienteService = Depends(get_ingrediente_service),
+) -> IngredienteDetail:
+    return svc.get_detail(ingrediente_id)
 
 
 @router.patch("/{ingrediente_id}", response_model=IngredientePublic)
@@ -57,3 +67,11 @@ def delete_ingrediente(
     svc: IngredienteService = Depends(get_ingrediente_service),
 ) -> None:
     svc.soft_delete(ingrediente_id)
+
+
+@router.patch("/{ingrediente_id}/restore", response_model=IngredientePublic)
+def restore_ingrediente(
+    ingrediente_id: int,
+    svc: IngredienteService = Depends(get_ingrediente_service),
+) -> IngredientePublic:
+    return svc.restore(ingrediente_id)

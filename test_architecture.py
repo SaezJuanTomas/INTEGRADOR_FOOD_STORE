@@ -63,12 +63,20 @@ def main():
             descripcion="Con mozzarella, parmesano, azul y ricotta",
             precio_base=Decimal("15.99"),
             disponible=True,
-            ingrediente_ids=[ing1.id],
+            ingredientes=[
+                {
+                    "ingrediente_id": ing1.id,
+                    "cantidad": 500,
+                    "unidad": "gramos",
+                    "es_removible": True,
+                    "es_opcional": False,
+                }
+            ],
         )
         prod = prod_svc.create(prod_data)
         print(f"  ✓ Producto creado: {prod.nombre} (ID: {prod.id})")
         print(f"    Precio: ${prod.precio_base}")
-        print(f"    Ingredientes: {prod.ingrediente_ids}")
+        print(f"    Ingredientes: {[f'{ing.cantidad}{ing.unidad}' for ing in prod.ingredientes]}")
 
         # Test 4: Validar duplicados
         print("\n--- Test 4: Validar duplicados ---")

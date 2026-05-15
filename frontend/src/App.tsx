@@ -1,8 +1,12 @@
 import { useState } from "react";
-import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { CategoriasPage, IngredientesPage, ProductosPage } from "./pages/EntityPages";
+import { CategoryDetailPage } from "./pages/CategoryDetailPage";
 import { HomePage } from "./pages/HomePage";
+import { IngredientDetailPage } from "./pages/IngredientDetailPage";
+import { ProductDetailPage } from "./pages/ProductDetailPage";
+import { VentasPage } from "./pages/VentasPage";
 import { LoginPage } from "./pages/LoginPage";
 
 function ProtectedRoute({ children }: { children: JSX.Element }): JSX.Element {
@@ -20,7 +24,8 @@ function DashboardLayout({ children, section }: DashboardLayoutProps): JSX.Eleme
   const [open, setOpen] = useState<boolean>(false);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 p-4 text-slate-800">
+    <div className="flex min-h-screen flex-col bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 text-slate-800">
+      <div className="flex-1 p-4">
       <div className="mx-auto max-w-6xl">
       <header className="mb-4 rounded-lg border border-orange-100 bg-white/90 p-4 shadow-sm backdrop-blur">
         <div className="flex items-center justify-between">
@@ -54,10 +59,14 @@ function DashboardLayout({ children, section }: DashboardLayoutProps): JSX.Eleme
             <NavLink to="/ingredientes" className="rounded bg-orange-100 px-3 py-2 text-sm text-orange-900">
               Ingredientes
             </NavLink>
+            <NavLink to="/ventas" className="rounded bg-orange-100 px-3 py-2 text-sm text-orange-900">
+              Ventas
+            </NavLink>
           </nav>
         ) : null}
       </header>
       {children}
+      </div>
       </div>
     </div>
   );
@@ -98,11 +107,61 @@ export function App(): JSX.Element {
         }
       />
       <Route
+        path="/productos/:productoId"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout section="🛍️ Detalle de producto">
+              <ProductDetailPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/producto/:productoId"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout section="🛍️ Detalle de producto">
+              <ProductDetailPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/ingredientes"
         element={
           <ProtectedRoute>
             <DashboardLayout section="🧂 Ingredientes">
               <IngredientesPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ingrediente/:ingredienteId"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout section="🧂 Detalle ingrediente">
+              <IngredientDetailPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/categoria/:categoriaId"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout section="📂 Detalle categoría">
+              <CategoryDetailPage />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ventas"
+        element={
+          <ProtectedRoute>
+            <DashboardLayout section="💰 Ventas">
+              <VentasPage />
             </DashboardLayout>
           </ProtectedRoute>
         }

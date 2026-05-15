@@ -5,7 +5,7 @@ from sqlmodel import Field, Relationship
 
 from app.core.base import BaseModel
 from app.models.producto_categoria import ProductoCategoria
-from app.models.ingrediente import ProductoIngrediente
+from app.models.producto_ingrediente import ProductoIngrediente
 
 
 class Producto(BaseModel, table=True):
@@ -24,6 +24,16 @@ class Producto(BaseModel, table=True):
     imagenes_url: Optional[str] = Field(default=None, nullable=True)
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0, nullable=True)
     disponible: bool = Field(default=True, nullable=False)
+    usa_stock_manual: bool = Field(default=False, nullable=False)
+    stock_manual: Optional[int] = Field(default=None, ge=0, nullable=True)
+    costo_compra_manual: Optional[Decimal] = Field(
+        default=None,
+        ge=0,
+        max_digits=10,
+        decimal_places=4,
+        nullable=True,
+    )
+    activo: bool = Field(default=True, nullable=False)
 
     # N:M hacia Categorias
     productos_categorias: List[ProductoCategoria] = Relationship(

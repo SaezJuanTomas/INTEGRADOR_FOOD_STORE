@@ -31,9 +31,10 @@ def create_producto(
 def list_productos(
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    include_deleted: bool = Query(default=False),
     svc: ProductoService = Depends(get_producto_service),
 ) -> ProductoList:
-    return svc.get_all(offset=offset, limit=limit)
+    return svc.get_all(offset=offset, limit=limit, include_deleted=include_deleted)
 
 
 @router.get("/{producto_id}", response_model=ProductoPublic)
@@ -59,3 +60,11 @@ def delete_producto(
     svc: ProductoService = Depends(get_producto_service),
 ) -> None:
     svc.soft_delete(producto_id)
+
+
+@router.patch("/{producto_id}/restore", response_model=ProductoPublic)
+def restore_producto(
+    producto_id: int,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.restore(producto_id)

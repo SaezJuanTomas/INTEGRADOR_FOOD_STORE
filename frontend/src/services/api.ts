@@ -1,5 +1,5 @@
-import type { Categoria, CategoriaCreate, CategoriaUpdate } from "../models/Categoria";
-import type { Ingrediente, IngredienteCreate, IngredienteUpdate } from "../models/Ingrediente";
+import type { Categoria, CategoriaCreate, CategoriaDetail, CategoriaUpdate } from "../models/Categoria";
+import type { Ingrediente, IngredienteCreate, IngredienteDetail, IngredienteUpdate } from "../models/Ingrediente";
 import type { Producto, ProductoCreate, ProductoUpdate } from "../models/Producto";
 
 const API_BASE_URL = "http://localhost:8000";
@@ -22,10 +22,12 @@ interface LoginResponse {
 }
 
 export interface CrudService<T, TCreate, TUpdate> {
-  getAll: (offset: number, limit: number) => Promise<ListResponse<T>>;
+  getAll: (offset: number, limit: number, includeDeleted?: boolean) => Promise<ListResponse<T>>;
+  getById: (id: number) => Promise<T>;
   create: (payload: TCreate) => Promise<T>;
   update: (id: number, payload: TUpdate) => Promise<T>;
   delete: (id: number) => Promise<void>;
+  restore: (id: number) => Promise<T>;
 }
 
 export async function loginRequest(payload: LoginPayload): Promise<LoginResponse> {
@@ -64,8 +66,17 @@ async function request<T>(
 
 function buildCrudService<T, TCreate, TUpdate>(resourcePath: string): CrudService<T, TCreate, TUpdate> {
   return {
-    getAll: (offset: number, limit: number) =>
-      request<ListResponse<T>>(`${resourcePath}?offset=${offset}&limit=${limit}`),
+    getAll: (offset: number, limit: number, includeDeleted?: boolean) => {
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(limit),
+      });
+      if (includeDeleted) {
+        params.append("include_deleted", "true");
+      }
+      return request<ListResponse<T>>(`${resourcePath}?${params.toString()}`);
+    },
+    getById: (id: number) => request<T>(`${resourcePath}/${id}`),
     create: (payload: TCreate) =>
       request<T>(resourcePath, {
         method: "POST",
@@ -80,11 +91,23 @@ function buildCrudService<T, TCreate, TUpdate>(resourcePath: string): CrudServic
       request<void>(`${resourcePath}/${id}`, {
         method: "DELETE",
       }),
+    restore: (id: number) =>
+      request<T>(`${resourcePath}/${id}/restore`, {
+        method: "PATCH",
+      }),
   };
 }
 
 export const categoriaService = buildCrudService<Categoria, CategoriaCreate, CategoriaUpdate>("/categorias");
 export const productoService = buildCrudService<Producto, ProductoCreate, ProductoUpdate>("/productos");
 export const ingredienteService = buildCrudService<Ingrediente, IngredienteCreate, IngredienteUpdate>("/ingredientes");
+
+export function getIngredienteDetail(ingredienteId: number): Promise<IngredienteDetail> {
+  return request<IngredienteDetail>(`/ingredientes/${ingredienteId}/detail`);
+}
+
+export function getCategoriaDetail(categoriaId: number): Promise<CategoriaDetail> {
+  return request<CategoriaDetail>(`/categorias/${categoriaId}/detail`);
+}
 
 export type { ListResponse };
