@@ -88,7 +88,12 @@ def list_pedidos(
     
     Los pedidos se retornan ordenados por fecha más reciente primero.
     """
-    return svc.list_pedidos(current_user.id, offset=offset, limit=limit)
+    return svc.list_pedidos(
+        current_user.id,
+        offset=offset,
+        limit=limit,
+        is_admin="ADMIN" in current_user.roles,
+    )
 
 
 @router.get("/{pedido_id}", response_model=PedidoDetail)

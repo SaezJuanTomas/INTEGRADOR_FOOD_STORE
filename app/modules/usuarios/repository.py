@@ -36,3 +36,19 @@ class UsuarioRepository(BaseRepository[Usuario]):
             Usuario.deleted_at.is_(None),
         )
         return self.session.exec(statement).one()
+
+    def get_by_login_identifier(self, identifier: str) -> Usuario | None:
+        """Obtener usuario por identificador de login (email o celular).
+
+        La UI envía habitualmente el email. También permitimos buscar por
+        `celular` por si se decide usarlo como identificador.
+        """
+        identifier = (identifier or "").strip()
+        if not identifier:
+            return None
+
+        # Buscar por email exacto o por número de celular
+        statement = select(Usuario).where(
+            (Usuario.email == identifier) | (Usuario.celular == identifier)
+        )
+        return self.session.exec(statement).first()

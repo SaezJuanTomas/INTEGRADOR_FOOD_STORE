@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from app.core.security import hash_password, verify_password, JWTHandler
-from app.models import Usuario, Rol
+from app.models import Usuario, Rol, UsuarioRol
 from app.modules.usuarios.repository import UsuarioRepository
 from app.modules.usuarios.schemas import (
     UsuarioCreate,
@@ -60,8 +60,19 @@ class AuthService:
             password_hash=hash_password(data.password),
             activo=True,
         )
-        
+
         usuario = self._usuario_repo.add(usuario)
+        self._session.flush()
+
+        rol_cliente = self._session.get(Rol, "CLIENTE")
+        if rol_cliente:
+            self._session.add(
+                UsuarioRol(
+                    usuario_id=usuario.id,
+                    rol_codigo=rol_cliente.codigo,
+                )
+            )
+
         self._session.commit()
         
         return self._to_public(usuario)
@@ -79,8 +90,14 @@ class AuthService:
         Raises:
             HTTPException: Si credenciales son inválidas
         """
-        # Buscar usuario
-        usuario = self._usuario_repo.get_by_email(data.email)
+        identifier = (data.email or data.username or "").strip()
+        if not identifier:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email o usuario son obligatorios",
+            )
+
+        usuario = self._usuario_repo.get_by_login_identifier(identifier)
         if not usuario or not usuario.activo or usuario.deleted_at is not None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -113,6 +130,7 @@ class AuthService:
             access_token=token,
             token_type="Bearer",
             usuario=self._to_public(usuario),
+            roles=roles,
         )
 
     def verify_token(self, token: str) -> Optional[CurrentUser]:

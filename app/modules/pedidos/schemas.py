@@ -77,6 +77,7 @@ class PedidoPublic(SQLModel):
     costo_envio: Decimal
     total: Decimal
     notas: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 class PedidoDetail(PedidoPublic):

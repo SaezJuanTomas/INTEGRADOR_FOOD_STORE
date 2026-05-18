@@ -117,7 +117,7 @@ class UsuarioList(SQLModel):
 # ============================================================================
 
 class LoginRequest(SQLModel):
-    email: str = Field(max_length=255)
+    email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=1)
 
 
@@ -125,6 +125,7 @@ class TokenResponse(SQLModel):
     access_token: str
     token_type: str
     usuario: UsuarioPublic
+    roles: List[str] = Field(default_factory=list)  # códigos de rol
 
 
 class CurrentUser(UsuarioPublic):

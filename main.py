@@ -23,7 +23,7 @@ def _initialize_roles_and_states():
     """Inicializar roles y estados de pedido si no existen."""
     from sqlmodel import Session, select
     from app.core.database import engine
-    from app.models import Rol, EstadoPedido
+    from app.models import Rol, EstadoPedido, Usuario, UsuarioRol
     
     session = Session(engine)
     
@@ -55,6 +55,37 @@ def _initialize_roles_and_states():
             if not existing:
                 estado = EstadoPedido(codigo=codigo, nombre=nombre, descripcion=descripcion)
                 session.add(estado)
+
+        # Garantizar que admin@test.com tenga rol ADMIN
+        admin_user = session.exec(
+            select(Usuario).where(
+                Usuario.email == "admin@test.com",
+                Usuario.deleted_at.is_(None),
+            )
+        ).first()
+        if admin_user:
+            admin_role_link = session.exec(
+                select(UsuarioRol).where(
+                    UsuarioRol.usuario_id == admin_user.id,
+                    UsuarioRol.rol_codigo == "ADMIN",
+                )
+            ).first()
+            if not admin_role_link:
+                session.add(UsuarioRol(usuario_id=admin_user.id, rol_codigo="ADMIN"))
+
+        # Garantizar rol CLIENTE para usuarios sin roles
+        usuarios = session.exec(
+            select(Usuario).where(
+                Usuario.deleted_at.is_(None),
+                Usuario.activo.is_(True),
+            )
+        ).all()
+        for usuario in usuarios:
+            has_any_role = session.exec(
+                select(UsuarioRol).where(UsuarioRol.usuario_id == usuario.id)
+            ).first()
+            if not has_any_role:
+                session.add(UsuarioRol(usuario_id=usuario.id, rol_codigo="CLIENTE"))
         
         session.commit()
     except Exception as e:
@@ -80,6 +111,9 @@ app.add_middleware(
         "http://localhost:5501",
         "http://127.0.0.1:3000",
         "http://localhost:3000",
+        # Vite dev server (frontend)
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],

@@ -1,42 +1,62 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
 
-  const [username, setUsername] = useState<string>("admin");
+  const [email, setEmail] = useState<string>("admin@test.com");
   const [password, setPassword] = useState<string>("contraseña123");
   const [error, setError] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // Redirige si ya está autenticado
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/home", { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     setError("");
+    setIsLoading(true);
 
     try {
-      await login(username, password);
-      navigate("/");
+      console.log("🔐 Iniciando login con:", email);
+      await login(email, password);
+      console.log("✅ Login exitoso");
+      // La redirección sucede automáticamente via useEffect cuando isAuthenticated cambia
     } catch (submitError) {
+      console.error("❌ Error en login:", submitError);
       if (submitError instanceof Error) {
         setError(submitError.message);
       } else {
         setError("No se pudo iniciar sesión");
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 p-4">
       <form onSubmit={handleSubmit} className="w-full max-w-md rounded-2xl border border-orange-100 bg-white/90 p-6 shadow-lg backdrop-blur">
-        <h1 className="mb-4 text-2xl font-bold text-orange-900">Login</h1>
+        <div className="mb-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-500">Food Store</p>
+          <h1 className="mt-1 text-2xl font-bold text-orange-950">Ingresar</h1>
+          <p className="mt-2 text-sm text-orange-800">Usá tu email y contraseña para entrar al panel.</p>
+        </div>
         <label className="mb-3 block text-sm font-medium text-orange-900">
-          Usuario
+          Email
           <input
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            className="mt-1 w-full rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
-            placeholder="admin"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            disabled={isLoading}
+            className="mt-1 w-full rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none disabled:opacity-50"
+            placeholder="admin@test.com"
           />
         </label>
         <label className="mb-3 block text-sm font-medium text-orange-900">
@@ -45,14 +65,47 @@ export function LoginPage(): JSX.Element {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            className="mt-1 w-full rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
+            disabled={isLoading}
+            className="mt-1 w-full rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none disabled:opacity-50"
             placeholder="1234"
           />
         </label>
-        {error ? <p className="mb-3 text-sm text-red-600">{error}</p> : null}
-        <p className="mb-3 text-xs text-orange-700">Usuario de prueba: admin | Clave: contraseña123</p>
-        <button type="submit" className="w-full rounded bg-orange-500 px-3 py-2 font-medium text-white shadow-sm">
-          Ingresar
+        {error ? <p className="mb-3 text-sm text-red-600">❌ {error}</p> : null}
+
+        <div className="mb-3 rounded border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
+          <p className="mb-2 font-semibold">Credenciales de prueba</p>
+          <ul className="mb-2 list-inside list-disc">
+            <li>Admin — email: <strong>admin@test.com</strong> | clave: <strong>contraseña123</strong></li>
+            <li>Cliente — email: <strong>cliente@test.com</strong> | clave: <strong>cliente123</strong></li>
+            <li>Demo — usuario: <strong>juan@test.com</strong> | clave: <strong>password123</strong></li>
+          </ul>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => { setEmail("admin@test.com"); setPassword("contraseña123"); }}
+              disabled={isLoading}
+              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
+            >Usar Admin</button>
+            <button
+              type="button"
+              onClick={() => { setEmail("cliente@test.com"); setPassword("cliente123"); }}
+              disabled={isLoading}
+              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
+            >Usar Cliente</button>
+            <button
+              type="button"
+              onClick={() => { setEmail("juan@test.com"); setPassword("password123"); }}
+              disabled={isLoading}
+              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
+            >Usar Demo</button>
+          </div>
+        </div>
+        <button 
+          type="submit" 
+          disabled={isLoading}
+          className="w-full rounded bg-orange-500 px-3 py-2 font-medium text-white shadow-sm disabled:opacity-50"
+        >
+          {isLoading ? "Ingresando..." : "Ingresar"}
         </button>
       </form>
     </div>

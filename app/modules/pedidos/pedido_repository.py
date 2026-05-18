@@ -43,3 +43,21 @@ class PedidoRepository(BaseRepository[Pedido]):
             Pedido.deleted_at.is_(None),
         )
         return self.session.exec(statement).one()
+
+    def get_all(self, offset: int = 0, limit: int = 20) -> list[Pedido]:
+        """Obtener todos los pedidos (uso administrativo)."""
+        statement = (
+            select(Pedido)
+            .where(Pedido.deleted_at.is_(None))
+            .order_by(Pedido.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return self.session.exec(statement).all()
+
+    def count_all(self) -> int:
+        """Contar todos los pedidos no eliminados (uso administrativo)."""
+        statement = select(func.count()).select_from(Pedido).where(
+            Pedido.deleted_at.is_(None),
+        )
+        return self.session.exec(statement).one()

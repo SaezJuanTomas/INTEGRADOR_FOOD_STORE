@@ -428,7 +428,13 @@ class PedidoService:
         pedido = self._get_pedido_seguro(usuario_id, pedido_id)
         return self._to_detail(pedido)
 
-    def list_pedidos(self, usuario_id: int, offset: int = 0, limit: int = 20) -> PedidoList:
+    def list_pedidos(
+        self,
+        usuario_id: int,
+        offset: int = 0,
+        limit: int = 20,
+        is_admin: bool = False,
+    ) -> PedidoList:
         """
         Listar pedidos del usuario.
         
@@ -440,8 +446,12 @@ class PedidoService:
         Returns:
             Lista paginada de pedidos
         """
-        pedidos = self._pedido_repo.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
-        total = self._pedido_repo.count_by_usuario(usuario_id)
+        if is_admin:
+            pedidos = self._pedido_repo.get_all(offset=offset, limit=limit)
+            total = self._pedido_repo.count_all()
+        else:
+            pedidos = self._pedido_repo.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
+            total = self._pedido_repo.count_by_usuario(usuario_id)
         
         return PedidoList(
             data=[self._to_public(p) for p in pedidos],
@@ -512,6 +522,7 @@ class PedidoService:
             costo_envio=pedido.costo_envio,
             total=pedido.total,
             notas=pedido.notas,
+            created_at=pedido.created_at,
         )
 
     def _to_detail(self, pedido: Pedido) -> PedidoDetail:

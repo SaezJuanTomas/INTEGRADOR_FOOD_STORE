@@ -61,6 +61,8 @@ curl -X POST "http://localhost:8000/auth/login" \
 
 **Guardar el `access_token` para los próximos requests.**
 
+El login usa el `email` del usuario, no un nombre corto.
+
 ---
 
 ## 3️⃣ OBTENER USUARIO ACTUAL

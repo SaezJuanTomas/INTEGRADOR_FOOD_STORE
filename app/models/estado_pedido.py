@@ -19,8 +19,16 @@ class EstadoPedido(BaseModel, table=True):
 
     # Relaciones
     pedidos: List["Pedido"] = Relationship(back_populates="estado")
-    historiales: List["HistorialEstadoPedido"] = Relationship(back_populates="estado_desde", cascade_delete=True)
-    historiales_hacia: List["HistorialEstadoPedido"] = Relationship(back_populates="estado_hacia", cascade_delete=True)
+    historiales: List["HistorialEstadoPedido"] = Relationship(
+        back_populates="estado_desde",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "HistorialEstadoPedido.estado_desde_codigo"},
+    )
+    historiales_hacia: List["HistorialEstadoPedido"] = Relationship(
+        back_populates="estado_hacia",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "HistorialEstadoPedido.estado_hacia_codigo"},
+    )
 
     def __repr__(self) -> str:
         return f"EstadoPedido(codigo={self.codigo}, nombre={self.nombre})"
