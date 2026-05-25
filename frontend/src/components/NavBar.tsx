@@ -3,7 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function NavBar(): JSX.Element {
-  const { logout, isAdmin, isCliente, user } = useAuth();
+  const { logout, isAdmin, isClient, isStock, isPedidos, user } = useAuth();
   const [open, setOpen] = useState(false);
 
   return (
@@ -54,7 +54,7 @@ export function NavBar(): JSX.Element {
               🛍️ Productos
             </NavLink>
 
-            {isCliente && (
+            {isClient && (
               <>
                 <NavLink
                   to="/carrito"
@@ -126,6 +126,28 @@ export function NavBar(): JSX.Element {
                   📊 Gastos
                 </NavLink>
               </>
+            )}
+
+            {isStock && (
+              <NavLink
+                to="/stock"
+                className={({ isActive }) =>
+                  `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                }
+              >
+                📦 Stock
+              </NavLink>
+            )}
+
+            {(isAdmin || isPedidos) && (
+              <NavLink
+                to="/operaciones-pedidos"
+                className={({ isActive }) =>
+                  `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                }
+              >
+                🍳 Pedidos en vivo
+              </NavLink>
             )}
           </nav>
         )}

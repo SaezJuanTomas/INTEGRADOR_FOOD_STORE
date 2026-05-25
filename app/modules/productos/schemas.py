@@ -69,3 +69,11 @@ class ProductoPublic(SQLModel):
 class ProductoList(SQLModel):
     data: List[ProductoPublic]
     total: int
+
+
+class ProductoDisponibilidadUpdate(SQLModel):
+    disponible: bool
+
+
+class ProductoStockUpdate(SQLModel):
+    stock_cantidad: int = Field(ge=0)

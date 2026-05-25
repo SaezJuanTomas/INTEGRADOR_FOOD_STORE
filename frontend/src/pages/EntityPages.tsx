@@ -303,8 +303,8 @@ function ProductoIngredientsEditor({
                   Quitar
                 </button>
 
-                <p className="text-xs text-orange-800 md:col-span-2 lg:col-span-6">
-                  Unidad esperada: {unidadEsperada}. Ajusta la cantidad para el stock derivado.
+                <p className="text-xs text-orange-400 md:col-span-2 lg:col-span-6">
+                  Unidad: {unidadEsperada}
                 </p>
               </div>
             );

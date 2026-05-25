@@ -36,7 +36,15 @@ export function AdminDashboard(): JSX.Element {
           className="rounded-2xl border border-orange-100 bg-gradient-to-br from-amber-50 to-amber-100 p-6 shadow-md transition hover:shadow-lg hover:border-amber-200"
         >
           <h2 className="mb-2 text-2xl font-bold text-amber-900">💰 Ventas</h2>
-          <p className="text-amber-800">Visualiza pedidos, ingresos y métricas del sistema.</p>
+          <p className="text-amber-800">Visualiza todas las ventas, historial de cambios y detalle completo.</p>
+        </a>
+
+        <a
+          href="/operaciones-pedidos"
+          className="rounded-2xl border border-orange-100 bg-gradient-to-br from-rose-50 to-rose-100 p-6 shadow-md transition hover:shadow-lg hover:border-rose-200"
+        >
+          <h2 className="mb-2 text-2xl font-bold text-rose-900">🍳 Pedidos en vivo</h2>
+          <p className="text-rose-800">Gestioná pedidos en tiempo real, cambiá estados y monitoreá órdenes.</p>
         </a>
 
         <a

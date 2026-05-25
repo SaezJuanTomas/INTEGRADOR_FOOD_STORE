@@ -57,6 +57,7 @@ class PedidoCreate(SQLModel):
     - notas: notas del cliente (opcional)
     """
     direccion_entrega_id: int = Field(ge=1)
+    forma_pago_codigo: Optional[str] = Field(default=None, max_length=50)
     detalles: List[DetallePedidoCreate] = Field(min_length=1, max_length=100)
     descuento: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
     notas: Optional[str] = Field(default=None, max_length=500)
@@ -71,6 +72,7 @@ class PedidoPublic(SQLModel):
     id: int
     usuario_id: int
     direccion_entrega_id: int
+    forma_pago_codigo: Optional[str] = None
     estado_codigo: str
     subtotal: Decimal
     descuento: Decimal

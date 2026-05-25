@@ -6,6 +6,8 @@ import { NavBar } from "./components/NavBar";
 import { CategoriasPage, IngredientesPage, ProductosPage } from "./pages/EntityPages";
 import { CategoryDetailPage } from "./pages/CategoryDetailPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
+import { StockDashboard } from "./pages/StockDashboard";
+import { PedidosDashboard } from "./pages/PedidosDashboard";
 import { ClienteDashboard } from "./pages/ClienteDashboard";
 import { IngredientDetailPage } from "./pages/IngredientDetailPage";
 import { ProductDetailPage } from "./pages/ProductDetailPage";
@@ -18,6 +20,10 @@ import { ProductosClientePage } from "./pages/ProductosClientePage";
 import { UsuariosAdminPage } from "./pages/UsuariosAdminPage";
 import { GastosAdminPage } from "./pages/GastosAdminPage";
 import { PerfilPage } from "./pages/PerfilPage";
+import { GestionStockPage } from "./pages/GestionStockPage";
+import { OperacionPedidoDetailPage } from "./pages/OperacionPedidoDetailPage";
+import { ProductosInternosPage } from "./pages/ProductosInternosPage";
+import { VentaDetailPage } from "./pages/VentaDetailPage";
 
 interface DashboardLayoutProps {
   children: JSX.Element;
@@ -35,7 +41,7 @@ function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element {
 }
 
 export function App(): JSX.Element {
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated, isAdmin, isStock, isPedidos } = useAuth();
 
   return (
     <CartProvider>
@@ -52,7 +58,7 @@ export function App(): JSX.Element {
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {isAdmin ? <AdminDashboard /> : <ClienteDashboard />}
+                {isAdmin ? <AdminDashboard /> : isStock ? <StockDashboard /> : isPedidos ? <PedidosDashboard /> : <ClienteDashboard />}
               </DashboardLayout>
             </ProtectedRoute>
           }
@@ -103,12 +109,57 @@ export function App(): JSX.Element {
           }
         />
 
+        {/* RUTAS ADMIN + PEDIDOS */}
         <Route
           path="/ventas"
           element={
             <ProtectedRoute requiredRoles={["ADMIN"]}>
               <DashboardLayout>
                 <VentasPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/ventas/:id"
+          element={
+            <ProtectedRoute requiredRoles={["ADMIN"]}>
+              <DashboardLayout>
+                <VentaDetailPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/operaciones-pedidos"
+          element={
+            <ProtectedRoute requiredRoles={["ADMIN", "PEDIDOS"]}>
+              <DashboardLayout>
+                <VentasPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/operaciones-pedidos/:id"
+          element={
+            <ProtectedRoute requiredRoles={["ADMIN", "PEDIDOS"]}>
+              <DashboardLayout>
+                <OperacionPedidoDetailPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/stock"
+          element={
+            <ProtectedRoute requiredRoles={["ADMIN", "STOCK"]}>
+              <DashboardLayout>
+                <GestionStockPage />
               </DashboardLayout>
             </ProtectedRoute>
           }
@@ -136,13 +187,13 @@ export function App(): JSX.Element {
           }
         />
 
-        {/* RUTAS COMUNES (Admin + Cliente) */}
+        {/* RUTAS COMUNES (Admin + Stock + Pedidos + Cliente) */}
         <Route
           path="/productos"
           element={
             <ProtectedRoute>
               <DashboardLayout>
-                {isAdmin ? <ProductosPage /> : <ProductosClientePage />}
+                {isAdmin ? <ProductosPage /> : isStock || isPedidos ? <ProductosInternosPage /> : <ProductosClientePage />}
               </DashboardLayout>
             </ProtectedRoute>
           }
@@ -174,7 +225,7 @@ export function App(): JSX.Element {
         <Route
           path="/carrito"
           element={
-            <ProtectedRoute requiredRoles={["CLIENTE"]}>
+            <ProtectedRoute requiredRoles={["CLIENT"]}>
               <DashboardLayout>
                 <CarritoPage />
               </DashboardLayout>
@@ -185,7 +236,7 @@ export function App(): JSX.Element {
         <Route
           path="/mis-pedidos"
           element={
-            <ProtectedRoute requiredRoles={["CLIENTE"]}>
+            <ProtectedRoute requiredRoles={["CLIENT"]}>
               <DashboardLayout>
                 <MisPedidosPage />
               </DashboardLayout>
@@ -196,7 +247,7 @@ export function App(): JSX.Element {
         <Route
           path="/perfil"
           element={
-            <ProtectedRoute requiredRoles={["CLIENTE"]}>
+            <ProtectedRoute requiredRoles={["CLIENT"]}>
               <DashboardLayout>
                 <PerfilPage />
               </DashboardLayout>

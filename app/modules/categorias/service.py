@@ -148,13 +148,13 @@ class CategoriaService:
 
             if uow.categorias.has_active_products(categoria_id):
                 raise HTTPException(
-                    status_code=422,
+                    status_code=409,
                     detail="No se puede desactivar la categoría porque tiene productos activos asociados",
                 )
 
             if uow.categorias.has_active_subcategories(categoria_id):
                 raise HTTPException(
-                    status_code=422,
+                    status_code=409,
                     detail="No se puede desactivar la categoría porque tiene subcategorías activas",
                 )
 

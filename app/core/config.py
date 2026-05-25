@@ -8,6 +8,12 @@ class Settings(BaseSettings):
     postgres_db: str = "food_store_db"
     postgres_host: str = "localhost"
     postgres_port: int = 5432
+    SECRET_KEY: str = "change_this_secret_key_for_production"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_NAME: str = "access_token"
 
     @computed_field
     @property

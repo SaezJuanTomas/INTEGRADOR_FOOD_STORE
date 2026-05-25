@@ -19,22 +19,28 @@ class UsuarioRepository(BaseRepository[Usuario]):
         statement = select(Usuario).where(Usuario.email == email)
         return self.session.exec(statement).first()
 
-    def get_active_paginated(self, offset: int = 0, limit: int = 20) -> list[Usuario]:
-        """Obtener usuarios activos con paginación."""
-        statement = (
-            select(Usuario)
-            .where(Usuario.activo.is_(True), Usuario.deleted_at.is_(None))
-            .offset(offset)
-            .limit(limit)
-        )
+    def get_paginated(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        include_inactive: bool = False,
+    ) -> list[Usuario]:
+        """Obtener usuarios con paginación; opcionalmente incluir inactivos."""
+        statement = select(Usuario).where(Usuario.deleted_at.is_(None))
+        if not include_inactive:
+            statement = statement.where(Usuario.activo.is_(True))
+
+        statement = statement.offset(offset).limit(limit)
         return self.session.exec(statement).all()
 
-    def count_active(self) -> int:
-        """Contar usuarios activos."""
+    def count(self, include_inactive: bool = False) -> int:
+        """Contar usuarios; opcionalmente incluir inactivos."""
         statement = select(func.count()).select_from(Usuario).where(
-            Usuario.activo.is_(True),
-            Usuario.deleted_at.is_(None),
+            Usuario.deleted_at.is_(None)
         )
+        if not include_inactive:
+            statement = statement.where(Usuario.activo.is_(True))
+
         return self.session.exec(statement).one()
 
     def get_by_login_identifier(self, identifier: str) -> Usuario | None:

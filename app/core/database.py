@@ -63,6 +63,11 @@ def _migrate_legacy_schema() -> None:
                 connection.execute(text("ALTER TABLE productos ADD COLUMN activo BOOLEAN NOT NULL DEFAULT TRUE"))
             connection.execute(text("UPDATE productos SET activo = CASE WHEN deleted_at IS NULL THEN TRUE ELSE FALSE END WHERE activo IS NULL"))
 
+        if "pedidos" in inspector.get_table_names():
+            pedido_columns = {column["name"] for column in inspector.get_columns("pedidos")}
+            if "forma_pago_codigo" not in pedido_columns:
+                connection.execute(text("ALTER TABLE pedidos ADD COLUMN forma_pago_codigo VARCHAR(50)"))
+
 
 def get_session():
     with Session(engine) as session:

@@ -1,0 +1,31 @@
+export function PedidosDashboard(): JSX.Element {
+  return (
+    <div className="space-y-4">
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-orange-900">Panel de Pedidos</h1>
+        <p className="mt-2 text-orange-700">Gestión de pedidos en vivo y operaciones diarias</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <a href="/operaciones-pedidos" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-amber-50 to-amber-100 p-6 shadow-md transition hover:shadow-lg hover:border-amber-200">
+          <h2 className="mb-2 text-2xl font-bold text-amber-900">🍳 Pedidos en vivo</h2>
+          <p className="text-amber-800">Visualiza y gestiona pedidos entrantes, cambia estados y confirma órdenes.</p>
+        </a>
+        <a href="/productos" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-blue-50 to-blue-100 p-6 shadow-md transition hover:shadow-lg hover:border-blue-200">
+          <h2 className="mb-2 text-2xl font-bold text-blue-900">🛍️ Productos</h2>
+          <p className="text-blue-800">Consultá el catálogo de productos disponibles.</p>
+        </a>
+      </div>
+
+      <div className="mt-8 rounded-lg border border-amber-100 bg-amber-50 p-6">
+        <h3 className="mb-3 text-lg font-semibold text-amber-900">📋 Tu rol: PEDIDOS</h3>
+        <ul className="space-y-2 text-sm text-amber-800">
+          <li>✓ Podés ver todos los pedidos del sistema</li>
+          <li>✓ Podés avanzar pedidos a través de sus estados</li>
+          <li>✓ Podés confirmar pedidos pendientes</li>
+          <li>✓ No podés gestionar productos, stock, usuarios ni roles</li>
+        </ul>
+      </div>
+    </div>
+  );
+}

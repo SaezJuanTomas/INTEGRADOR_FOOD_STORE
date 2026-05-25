@@ -16,6 +16,7 @@ from app.models.rol import Rol  # noqa: F401
 from app.models.usuario import Usuario  # noqa: F401
 from app.models.direccion_entrega import DireccionEntrega  # noqa: F401
 from app.models.estado_pedido import EstadoPedido  # noqa: F401
+from app.models.forma_pago import FormaPago  # noqa: F401
 from app.models.pedido import Pedido  # noqa: F401
 from app.models.detalle_pedido import DetallePedido  # noqa: F401
 from app.models.historial_estado_pedido import HistorialEstadoPedido  # noqa: F401
@@ -31,6 +32,7 @@ __all__ = [
     "UsuarioRol",
     "DireccionEntrega",
     "EstadoPedido",
+    "FormaPago",
     "Pedido",
     "DetallePedido",
     "HistorialEstadoPedido",

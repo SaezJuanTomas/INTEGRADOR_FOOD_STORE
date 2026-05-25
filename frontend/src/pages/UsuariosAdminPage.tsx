@@ -23,10 +23,11 @@ export function UsuariosAdminPage(): JSX.Element {
   const queryClient = useQueryClient();
   const [editingUser, setEditingUser] = useState<UsuarioPublic | null>(null);
   const [form, setForm] = useState<UserFormState | null>(null);
+  const [includeInactive, setIncludeInactive] = useState<boolean>(true);
 
   const usuariosQuery = useQuery({
-    queryKey: ["usuarios", "admin"],
-    queryFn: () => listUsuarios(0, 100),
+    queryKey: ["usuarios", "admin", includeInactive],
+    queryFn: () => listUsuarios(0, 100, includeInactive),
   });
 
   const saveMutation = useMutation({
@@ -50,6 +51,16 @@ export function UsuariosAdminPage(): JSX.Element {
     },
   });
 
+  const reactivateMutation = useMutation({
+    mutationFn: async (user: UsuarioPublic) => {
+      return updateUsuario(user.id, { activo: true });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["usuarios", "admin"] });
+      window.alert("Usuario reactivado correctamente");
+    },
+  });
+
   const openEditor = (user: UsuarioPublic): void => {
     setEditingUser(user);
     setForm(buildFormState(user));
@@ -70,6 +81,14 @@ export function UsuariosAdminPage(): JSX.Element {
       <div>
         <h1 className="text-3xl font-bold text-orange-900">Usuarios</h1>
         <p className="mt-1 text-sm text-slate-700">Edición rápida de datos de usuarios para administración.</p>
+        <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={includeInactive}
+            onChange={(event) => setIncludeInactive(event.target.checked)}
+          />
+          Mostrar usuarios inactivos
+        </label>
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-orange-100 bg-white">
@@ -95,13 +114,25 @@ export function UsuariosAdminPage(): JSX.Element {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => openEditor(user)}
-                    className="rounded bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
-                  >
-                    Editar
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditor(user)}
+                      className="rounded bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+                    >
+                      Editar
+                    </button>
+                    {!user.activo ? (
+                      <button
+                        type="button"
+                        onClick={() => reactivateMutation.mutate(user)}
+                        disabled={reactivateMutation.isPending}
+                        className="rounded bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {reactivateMutation.isPending ? "Reactivando..." : "Dar de alta"}
+                      </button>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}

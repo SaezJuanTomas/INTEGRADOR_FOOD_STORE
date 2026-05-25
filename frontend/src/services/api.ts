@@ -1,9 +1,51 @@
+import axios, { AxiosError, type AxiosRequestConfig } from "axios";
 import type { Categoria, CategoriaCreate, CategoriaDetail, CategoriaUpdate } from "../models/Categoria";
 import type { Ingrediente, IngredienteCreate, IngredienteDetail, IngredienteUpdate } from "../models/Ingrediente";
 import type { Producto, ProductoCreate, ProductoUpdate } from "../models/Producto";
 
-const API_BASE_URLS = ["http://127.0.0.1:8000", "http://localhost:8000"];
+const API_BASE_URLS = ["/api"];
 const TOKEN_KEY = "food_store_token";
+const api = axios.create({
+  baseURL: API_BASE_URLS[0],
+  withCredentials: true,
+  timeout: 10000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(TOKEN_KEY);
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem("food_store_user");
+      localStorage.removeItem("food_store_roles");
+    }
+
+    if (!error.response) {
+      return Promise.reject(new Error("No se puede conectar al servidor backend."));
+    }
+
+    const data = error.response.data;
+    if (typeof data === "string" && data.trim()) {
+      return Promise.reject(new Error(data));
+    }
+    if (data && typeof data === "object" && "detail" in data) {
+      return Promise.reject(new Error(String((data as { detail: unknown }).detail)));
+    }
+
+    return Promise.reject(new Error(`Error ${error.response.status} en la API`));
+  }
+);
 
 interface ListResponse<T> {
   data: T[];
@@ -127,7 +169,7 @@ export async function loginRequest(payload: LoginPayload): Promise<LoginResponse
   try {
     const result = await request<LoginResponse>("/auth/login", {
       method: "POST",
-      body: JSON.stringify(payload),
+      data: payload,
     });
     console.log("📥 Login response recibido:", result);
     return result;
@@ -139,78 +181,42 @@ export async function loginRequest(payload: LoginPayload): Promise<LoginResponse
 
 async function request<T>(
   path: string,
-  options: Omit<RequestInit, "headers"> & { headers?: Record<string, string> } = {}
+  options: AxiosRequestConfig = {}
 ): Promise<T> {
-  const token = localStorage.getItem(TOKEN_KEY);
-
   try {
-    // Crear AbortController para timeout
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.error("⏱️ Timeout: La solicitud tardó más de 10 segundos");
-      abortController.abort();
-    }, 10000); // 10 segundos timeout
-
-    try {
-      let lastNetworkError: unknown = null;
-      let response: Response | null = null;
-
-      for (const baseUrl of API_BASE_URLS) {
-        try {
-          response = await fetch(`${baseUrl}${path}`, {
-            ...options,
-            signal: abortController.signal,
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              ...(options.headers ?? {}),
-            },
-            // Incluir credenciales (cookies httponly) para que el backend pueda setear/leer la cookie de sesión
-            credentials: "include",
-          });
-          break;
-        } catch (networkError) {
-          lastNetworkError = networkError;
-        }
+    const response = await api.request<T>({
+      url: path,
+      method: options.method,
+      data: options.data,
+      params: options.params,
+      headers: options.headers,
+    });
+    return response.data;
+  } catch (firstError) {
+    for (const fallbackBaseUrl of API_BASE_URLS.slice(1)) {
+      try {
+        const fallback = await axios.request<T>({
+          baseURL: fallbackBaseUrl,
+          url: path,
+          method: options.method,
+          data: options.data,
+          params: options.params,
+          headers: {
+            ...(options.headers ?? {}),
+            Authorization: localStorage.getItem(TOKEN_KEY)
+              ? `Bearer ${localStorage.getItem(TOKEN_KEY)}`
+              : undefined,
+          },
+          withCredentials: true,
+          timeout: 10000,
+        });
+        return fallback.data;
+      } catch {
+        continue;
       }
-
-      if (!response) {
-        throw lastNetworkError instanceof Error
-          ? lastNetworkError
-          : new Error("No se pudo conectar con el backend");
-      }
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ API Error ${response.status}:`, errorText);
-        throw new Error(errorText || `Error ${response.status} en la API`);
-      }
-
-      if (response.status === 204) {
-        return undefined as T;
-      }
-
-      const data = await response.json();
-      return data as T;
-    } finally {
-      clearTimeout(timeoutId);
     }
-  } catch (error) {
-    if (error instanceof Error) {
-      // Si es un error de red
-      if (error.name === "AbortError") {
-        console.error("⏱️ Timeout de 10 segundos - El servidor no responde");
-          throw new Error("El servidor no responde. ¿Está corriendo en http://127.0.0.1:8000 o http://localhost:8000?");
-      }
-      if (error.message === "Failed to fetch" || error.message.includes("fetch")) {
-        console.error("🌐 Error de conexión - ¿El backend está corriendo?");
-          throw new Error("No se puede conectar al servidor. ¿El backend está corriendo en http://127.0.0.1:8000 o http://localhost:8000?");
-      }
-      throw error;
-    }
-    throw new Error("Error desconocido en la API");
+
+    throw firstError;
   }
 }
 
@@ -230,12 +236,12 @@ function buildCrudService<T, TCreate, TUpdate>(resourcePath: string): CrudServic
     create: (payload: TCreate) =>
       request<T>(resourcePath, {
         method: "POST",
-        body: JSON.stringify(payload),
+        data: payload,
       }),
     update: (id: number, payload: TUpdate) =>
       request<T>(`${resourcePath}/${id}`, {
         method: "PATCH",
-        body: JSON.stringify(payload),
+        data: payload,
       }),
     delete: (id: number) =>
       request<void>(`${resourcePath}/${id}`, {
@@ -252,8 +258,14 @@ export const categoriaService = buildCrudService<Categoria, CategoriaCreate, Cat
 export const productoService = buildCrudService<Producto, ProductoCreate, ProductoUpdate>("/productos");
 export const ingredienteService = buildCrudService<Ingrediente, IngredienteCreate, IngredienteUpdate>("/ingredientes");
 
-export function listUsuarios(offset = 0, limit = 50): Promise<ListResponse<UsuarioPublic>> {
-  return request<ListResponse<UsuarioPublic>>(`/usuarios?offset=${offset}&limit=${limit}`);
+export function listUsuarios(
+  offset = 0,
+  limit = 50,
+  includeInactive = false
+): Promise<ListResponse<UsuarioPublic>> {
+  return request<ListResponse<UsuarioPublic>>(
+    `/usuarios?offset=${offset}&limit=${limit}&include_inactive=${includeInactive}`
+  );
 }
 
 export function getUsuario(usuarioId: number): Promise<UsuarioDetail> {
@@ -263,7 +275,7 @@ export function getUsuario(usuarioId: number): Promise<UsuarioDetail> {
 export function updateUsuario(usuarioId: number, payload: UsuarioUpdatePayload): Promise<UsuarioDetail> {
   return request<UsuarioDetail>(`/usuarios/${usuarioId}`, {
     method: "PUT",
-    body: JSON.stringify(payload),
+    data: payload,
   });
 }
 
@@ -283,7 +295,7 @@ export function createDireccionUsuario(
 ): Promise<DireccionEntregaPublic> {
   return request<DireccionEntregaPublic>(`/usuarios/${usuarioId}/direcciones`, {
     method: "POST",
-    body: JSON.stringify(payload),
+    data: payload,
   });
 }
 
@@ -294,14 +306,23 @@ export function updateDireccionUsuario(
 ): Promise<DireccionEntregaPublic> {
   return request<DireccionEntregaPublic>(`/usuarios/${usuarioId}/direcciones/${direccionId}`, {
     method: "PUT",
-    body: JSON.stringify(payload),
+    data: payload,
+  });
+}
+
+export function setDireccionPrincipalUsuario(
+  usuarioId: number,
+  direccionId: number
+): Promise<DireccionEntregaPublic> {
+  return request<DireccionEntregaPublic>(`/usuarios/${usuarioId}/direcciones/${direccionId}/principal`, {
+    method: "PATCH",
   });
 }
 
 export function createPedido(payload: PedidoCreatePayload): Promise<ConfirmarPedidoResponse> {
   return request<ConfirmarPedidoResponse>("/pedidos", {
     method: "POST",
-    body: JSON.stringify(payload),
+    data: payload,
   });
 }
 
@@ -311,8 +332,27 @@ export function confirmPedido(pedidoId: number): Promise<ConfirmarPedidoResponse
   });
 }
 
+export function cancelarPedido(pedidoId: number, motivo?: string): Promise<PedidoPublic> {
+  const suffix = motivo ? `?motivo=${encodeURIComponent(motivo)}` : "";
+  return request<PedidoPublic>(`/pedidos/${pedidoId}/cancelar${suffix}`, {
+    method: "PATCH",
+  });
+}
+
+export function cambiarEstadoPedido(pedidoId: number, estado_codigo: string, motivo?: string): Promise<PedidoPublic> {
+  return request<PedidoPublic>(`/pedidos/${pedidoId}/estado`, {
+    method: "PATCH",
+    data: { estado_codigo, motivo },
+  });
+}
+
 export function listPedidos(offset = 0, limit = 50): Promise<ListResponse<PedidoPublic>> {
   return request<ListResponse<PedidoPublic>>(`/pedidos?offset=${offset}&limit=${limit}`);
+}
+
+export function getPedidosWebSocketUrl(): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/api/pedidos/ws/pedidos`;
 }
 
 export function getIngredienteDetail(ingredienteId: number): Promise<IngredienteDetail> {
@@ -321,6 +361,78 @@ export function getIngredienteDetail(ingredienteId: number): Promise<Ingrediente
 
 export function getCategoriaDetail(categoriaId: number): Promise<CategoriaDetail> {
   return request<CategoriaDetail>(`/categorias/${categoriaId}/detail`);
+}
+
+// ============================================================================
+// STOCK OPERATIONS
+// ============================================================================
+
+export function updateProductoStock(productoId: number, stockCantidad: number): Promise<Producto> {
+  return request<Producto>(`/productos/${productoId}/stock`, {
+    method: "PATCH",
+    data: { stock_cantidad: stockCantidad },
+  });
+}
+
+export function updateProductoDisponibilidad(productoId: number, disponible: boolean): Promise<Producto> {
+  return request<Producto>(`/productos/${productoId}/disponibilidad`, {
+    method: "PATCH",
+    data: { disponible },
+  });
+}
+
+// ============================================================================
+// PEDIDO OPERATIONS
+// ============================================================================
+
+export interface DetallePedidoPublic {
+  id: number;
+  producto_id: number;
+  cantidad: number;
+  nombre_snapshot: string;
+  precio_snapshot: number;
+  subtotal_snapshot: number;
+}
+
+export interface EstadoPedidoPublic {
+  codigo: string;
+  nombre: string;
+  descripcion: string | null;
+}
+
+export interface PedidoDetail {
+  id: number;
+  usuario_id: number;
+  direccion_entrega_id: number;
+  forma_pago_codigo: string | null;
+  estado_codigo: string;
+  subtotal: number;
+  descuento: number;
+  costo_envio: number;
+  total: number;
+  notas: string | null;
+  created_at: string;
+  updated_at: string;
+  estado: EstadoPedidoPublic;
+  detalles: DetallePedidoPublic[];
+}
+
+export interface HistorialEstadoPedidoPublic {
+  id: number;
+  pedido_id: number;
+  estado_desde_codigo: string;
+  estado_hacia_codigo: string;
+  usuario_id: number | null;
+  motivo: string | null;
+  fecha: string;
+}
+
+export function getPedidoDetail(pedidoId: number): Promise<PedidoDetail> {
+  return request<PedidoDetail>(`/pedidos/${pedidoId}`);
+}
+
+export function getHistorialPedido(pedidoId: number): Promise<{ data: HistorialEstadoPedidoPublic[] }> {
+  return request<{ data: HistorialEstadoPedidoPublic[] }>(`/pedidos/${pedidoId}/historial`);
 }
 
 export type { ListResponse };

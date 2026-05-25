@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from app.models.usuario import Usuario
     from app.models.direccion_entrega import DireccionEntrega
     from app.models.estado_pedido import EstadoPedido
+    from app.models.forma_pago import FormaPago
     from app.models.detalle_pedido import DetallePedido
     from app.models.historial_estado_pedido import HistorialEstadoPedido
 
@@ -32,6 +33,7 @@ class Pedido(BaseModel, table=True):
     direccion_entrega_id: int = Field(foreign_key="direcciones_entrega.id", nullable=False)
     estado_codigo: str = Field(foreign_key="estados_pedido.codigo", max_length=50, nullable=False)
     subtotal: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2, nullable=False)
+    forma_pago_codigo: Optional[str] = Field(default=None, foreign_key="formas_pago.codigo", max_length=50, nullable=True)
     descuento: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2, nullable=False)
     costo_envio: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2, nullable=False)
     total: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2, nullable=False)
@@ -41,6 +43,7 @@ class Pedido(BaseModel, table=True):
     usuario: "Usuario" = Relationship(back_populates="pedidos")
     direccion_entrega: "DireccionEntrega" = Relationship(back_populates="pedidos")
     estado: "EstadoPedido" = Relationship(back_populates="pedidos")
+    forma_pago: Optional["FormaPago"] = Relationship()
     detalles: List["DetallePedido"] = Relationship(back_populates="pedido", cascade_delete=True)
     historiales: List["HistorialEstadoPedido"] = Relationship(back_populates="pedido", cascade_delete=True)
 

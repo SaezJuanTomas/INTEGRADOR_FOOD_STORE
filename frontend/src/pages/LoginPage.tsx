@@ -76,16 +76,30 @@ export function LoginPage(): JSX.Element {
           <p className="mb-2 font-semibold">Credenciales de prueba</p>
           <ul className="mb-2 list-inside list-disc">
             <li>Admin — email: <strong>admin@test.com</strong> | clave: <strong>contraseña123</strong></li>
+            <li>Stock — email: <strong>stock@test.com</strong> | clave: <strong>stock123</strong></li>
+            <li>Pedidos — email: <strong>pedidos@test.com</strong> | clave: <strong>pedidos123</strong></li>
             <li>Cliente — email: <strong>cliente@test.com</strong> | clave: <strong>cliente123</strong></li>
             <li>Demo — usuario: <strong>juan@test.com</strong> | clave: <strong>password123</strong></li>
           </ul>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => { setEmail("admin@test.com"); setPassword("contraseña123"); }}
               disabled={isLoading}
               className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
             >Usar Admin</button>
+            <button
+              type="button"
+              onClick={() => { setEmail("stock@test.com"); setPassword("stock123"); }}
+              disabled={isLoading}
+              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
+            >Usar Stock</button>
+            <button
+              type="button"
+              onClick={() => { setEmail("pedidos@test.com"); setPassword("pedidos123"); }}
+              disabled={isLoading}
+              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
+            >Usar Pedidos</button>
             <button
               type="button"
               onClick={() => { setEmail("cliente@test.com"); setPassword("cliente123"); }}

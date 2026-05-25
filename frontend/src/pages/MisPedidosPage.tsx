@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listPedidos, type PedidoPublic } from "../services/api";
+import { getPedidosWebSocketUrl, listPedidos, type PedidoPublic } from "../services/api";
 
 export function MisPedidosPage(): JSX.Element {
   const [pedidos, setPedidos] = useState<PedidoPublic[]>([]);
@@ -20,13 +20,22 @@ export function MisPedidosPage(): JSX.Element {
     };
 
     cargarPedidos();
+
+    const ws = new WebSocket(getPedidosWebSocketUrl());
+    ws.onmessage = () => {
+      cargarPedidos();
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
   const getEstadoColor = (estado: string): string => {
     const colores: Record<string, string> = {
       PENDIENTE: "bg-yellow-100 text-yellow-800",
       CONFIRMADO: "bg-blue-100 text-blue-800",
-      PREPARANDO: "bg-purple-100 text-purple-800",
+      EN_PREP: "bg-purple-100 text-purple-800",
       EN_CAMINO: "bg-orange-100 text-orange-800",
       ENTREGADO: "bg-green-100 text-green-800",
       CANCELADO: "bg-red-100 text-red-800",

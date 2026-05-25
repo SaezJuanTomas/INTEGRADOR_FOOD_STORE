@@ -1,18 +1,14 @@
-"""
-Pedidos Router: Endpoints para gestión de pedidos.
-POST /pedidos - Crear nuevo pedido
-GET /pedidos - Listar pedidos del usuario autenticado
-GET /pedidos/{pedido_id} - Obtener detalle de pedido
-PATCH /pedidos/{pedido_id}/confirmar - Confirmar pedido (PENDIENTE → CONFIRMADO)
-PATCH /pedidos/{pedido_id}/cancelar - Cancelar pedido
-PATCH /pedidos/{pedido_id}/estado - Cambiar estado de pedido
-GET /pedidos/{pedido_id}/historial - Ver historial de cambios de estado
-"""
+"""Pedidos Router: gestión de pedidos y updates en vivo por websocket."""
 
-from fastapi import APIRouter, Depends, Query, status, Header
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from sqlmodel import Session
 
-from app.core.database import get_session
+from app.core.config import settings
+from app.core.deps import get_current_active_user, require_roles
+from app.core.database import engine, get_session
+from app.core.rbac import ROLE_ADMIN, ROLE_CLIENT, ROLE_PEDIDOS
+from app.core.security import decode_access_token
+from app.core.websocket import manager
 from app.modules.pedidos.service import PedidoService
 from app.modules.pedidos.schemas import (
     PedidoCreate,
@@ -23,8 +19,8 @@ from app.modules.pedidos.schemas import (
     HistorialEstadoPedidoList,
     CambiarEstadoPedidoRequest,
 )
+from app.modules.usuarios.repository import UsuarioRepository
 from app.modules.usuarios.schemas import CurrentUser
-from app.modules.auth.router import get_current_user
 
 router = APIRouter()
 
@@ -38,10 +34,10 @@ def get_pedido_service(session: Session = Depends(get_session)) -> PedidoService
 # CREAR PEDIDO
 # ============================================================================
 
-@router.post("/", response_model=ConfirmarPedidoResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ConfirmarPedidoResponse, status_code=status.HTTP_201_CREATED)
 def crear_pedido(
     data: PedidoCreate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_roles([ROLE_CLIENT, ROLE_ADMIN])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> ConfirmarPedidoResponse:
     """
@@ -70,11 +66,11 @@ def crear_pedido(
 # OBTENER PEDIDOS
 # ============================================================================
 
-@router.get("/", response_model=PedidoList)
+@router.get("", response_model=PedidoList)
 def list_pedidos(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoList:
     """
@@ -92,14 +88,14 @@ def list_pedidos(
         current_user.id,
         offset=offset,
         limit=limit,
-        is_admin="ADMIN" in current_user.roles,
+        roles=current_user.roles,
     )
 
 
 @router.get("/{pedido_id}", response_model=PedidoDetail)
 def get_pedido(
     pedido_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoDetail:
     """
@@ -117,7 +113,7 @@ def get_pedido(
     - Cálculos de subtotal, descuento, envío y total
     - Información de envío
     """
-    return svc.get_pedido(current_user.id, pedido_id)
+    return svc.get_pedido(current_user.id, pedido_id, current_user.roles)
 
 
 # ============================================================================
@@ -125,9 +121,9 @@ def get_pedido(
 # ============================================================================
 
 @router.patch("/{pedido_id}/confirmar", response_model=ConfirmarPedidoResponse)
-def confirmar_pedido(
+async def confirmar_pedido(
     pedido_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_PEDIDOS])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> ConfirmarPedidoResponse:
     """
@@ -144,14 +140,14 @@ def confirmar_pedido(
     Parámetros:
     - **pedido_id**: ID del pedido
     """
-    return svc.confirmar_pedido(current_user.id, pedido_id)
+    return await svc.confirmar_pedido(current_user.id, pedido_id)
 
 
 @router.patch("/{pedido_id}/cancelar", response_model=PedidoDetail)
-def cancelar_pedido(
+async def cancelar_pedido(
     pedido_id: int,
     motivo: str | None = Query(default=None, max_length=500),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_roles([ROLE_CLIENT, ROLE_ADMIN])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoDetail:
     """
@@ -169,7 +165,7 @@ def cancelar_pedido(
     - **pedido_id**: ID del pedido
     - **motivo**: Razón de cancelación (opcional)
     """
-    return svc.cancelar_pedido(current_user.id, pedido_id, motivo)
+    return await svc.cancelar_pedido(current_user.id, pedido_id, current_user.roles, motivo)
 
 
 # ============================================================================
@@ -177,10 +173,10 @@ def cancelar_pedido(
 # ============================================================================
 
 @router.patch("/{pedido_id}/estado", response_model=PedidoDetail)
-def cambiar_estado_pedido(
+async def cambiar_estado_pedido(
     pedido_id: int,
     data: CambiarEstadoPedidoRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_PEDIDOS])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoDetail:
     """
@@ -201,7 +197,7 @@ def cambiar_estado_pedido(
     - **estado_codigo**: Nuevo estado (e.g., PREPARANDO, EN_CAMINO, ENTREGADO)
     - **motivo**: Razón del cambio (opcional)
     """
-    return svc.cambiar_estado(current_user.id, pedido_id, data)
+    return await svc.cambiar_estado(current_user.id, pedido_id, data)
 
 
 # ============================================================================
@@ -211,7 +207,7 @@ def cambiar_estado_pedido(
 @router.get("/{pedido_id}/historial", response_model=HistorialEstadoPedidoList)
 def get_historial_pedido(
     pedido_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> HistorialEstadoPedidoList:
     """
@@ -229,4 +225,41 @@ def get_historial_pedido(
     - Motivo del cambio
     - Fecha y hora de cada transición
     """
-    return svc.get_historial(current_user.id, pedido_id)
+    return svc.get_historial(current_user.id, pedido_id, current_user.roles)
+
+
+@router.websocket("/ws/pedidos")
+async def pedidos_websocket(websocket: WebSocket):
+    token = websocket.cookies.get(settings.COOKIE_NAME)
+    if not token:
+        auth_header = websocket.headers.get("Authorization")
+        if auth_header and auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1]
+
+    payload = decode_access_token(token or "") if token else None
+    if payload is None:
+        await websocket.accept()
+        await websocket.close(code=1008, reason="Token inválido")
+        return
+
+    user_id = payload.get("sub")
+    if user_id is None:
+        await websocket.accept()
+        await websocket.close(code=1008, reason="Token inválido")
+        return
+
+    with Session(engine) as session:
+        usuario = UsuarioRepository(session).get_by_id(int(user_id))
+        if usuario is None or not usuario.activo or usuario.deleted_at is not None:
+            await websocket.accept()
+            await websocket.close(code=1008, reason="Usuario inválido")
+            return
+
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)

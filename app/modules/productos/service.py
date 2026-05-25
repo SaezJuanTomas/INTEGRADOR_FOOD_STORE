@@ -137,7 +137,7 @@ class ProductoService:
                     detail=f"Ingrediente con ID {ing.ingrediente_id} no existe o está inactivo",
                 )
 
-            if ing.unidad != ingrediente.unidad_medida:
+            if str(ing.unidad) != str(ingrediente.unidad_medida):
                 raise HTTPException(
                     status_code=422,
                     detail=f"La unidad del ingrediente {ing.ingrediente_id} debe ser {ingrediente.unidad_medida.value}",
@@ -191,17 +191,73 @@ class ProductoService:
 
         return result
 
-    def get_all(self, offset: int = 0, limit: int = 20, include_deleted: bool = False) -> ProductoList:
+    def get_all(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        include_deleted: bool = False,
+        categoria_id: int | None = None,
+        disponible: bool | None = None,
+        q: str | None = None,
+    ) -> ProductoList:
         """Obtener todos los productos (opcionalmente incluyendo inactivos)."""
         with CatalogUnitOfWork(self._session) as uow:
             if include_deleted:
                 items = uow.productos.get_all_paginated(offset=offset, limit=limit)
                 total = uow.productos.count_all()
             else:
-                items = uow.productos.get_active_paginated(offset=offset, limit=limit)
-                total = uow.productos.count_active()
+                items = uow.productos.get_active_paginated(offset=0, limit=10000)
+                if categoria_id is not None:
+                    items = [
+                        item
+                        for item in items
+                        if any(rel.categoria_id == categoria_id for rel in item.productos_categorias)
+                    ]
+                if disponible is not None:
+                    items = [item for item in items if item.disponible is disponible]
+                if q:
+                    q_lower = q.strip().lower()
+                    if q_lower:
+                        items = [
+                            item
+                            for item in items
+                            if q_lower in item.nombre.lower()
+                            or (item.descripcion is not None and q_lower in item.descripcion.lower())
+                        ]
+
+                total = len(items)
+                items = items[offset : offset + limit]
+
             data = [self._to_public(item) for item in items]
         return ProductoList(data=data, total=total)
+
+    def update_disponibilidad(self, producto_id: int, disponible: bool) -> ProductoPublic:
+        with CatalogUnitOfWork(self._session) as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if producto is None or not self._is_active_product(producto):
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+            producto.disponible = disponible
+            producto.updated_at = datetime.now(timezone.utc)
+            uow.productos.add(producto)
+            result = self._to_public(producto)
+
+        return result
+
+    def update_stock_manual(self, producto_id: int, stock_cantidad: int) -> ProductoPublic:
+        with CatalogUnitOfWork(self._session) as uow:
+            producto = uow.productos.get_by_id(producto_id)
+            if producto is None or not self._is_active_product(producto):
+                raise HTTPException(status_code=404, detail="Producto no encontrado")
+            if not producto.usa_stock_manual:
+                raise HTTPException(status_code=409, detail="El producto no usa stock manual")
+
+            producto.stock_manual = stock_cantidad
+            producto.updated_at = datetime.now(timezone.utc)
+            uow.productos.add(producto)
+            result = self._to_public(producto)
+
+        return result
 
     def get_by_id(self, producto_id: int) -> ProductoPublic:
         """Obtener producto por ID."""

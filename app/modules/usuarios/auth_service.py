@@ -8,7 +8,8 @@ from typing import Optional
 from fastapi import HTTPException, status
 from sqlmodel import Session
 
-from app.core.security import hash_password, verify_password, JWTHandler
+from app.core.rbac import ROLE_CLIENT, normalize_role
+from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.models import Usuario, Rol, UsuarioRol
 from app.modules.usuarios.repository import UsuarioRepository
 from app.modules.usuarios.schemas import (
@@ -64,7 +65,7 @@ class AuthService:
         usuario = self._usuario_repo.add(usuario)
         self._session.flush()
 
-        rol_cliente = self._session.get(Rol, "CLIENTE")
+        rol_cliente = self._session.get(Rol, ROLE_CLIENT)
         if rol_cliente:
             self._session.add(
                 UsuarioRol(
@@ -112,7 +113,7 @@ class AuthService:
             )
         
         # Obtener roles
-        roles = [ur.rol.codigo for ur in usuario.usuarios_roles]
+        roles = [normalize_role(ur.rol.codigo) for ur in usuario.usuarios_roles]
         
         # Generar token
         token_data = {
@@ -121,7 +122,7 @@ class AuthService:
             "roles": roles,
         }
         
-        token = JWTHandler.create_token(
+        token = create_access_token(
             token_data,
             expires_delta=timedelta(hours=24),
         )
@@ -143,7 +144,7 @@ class AuthService:
         Returns:
             CurrentUser si es válido, None si no
         """
-        payload = JWTHandler.verify_token(token)
+        payload = decode_access_token(token)
         if not payload:
             return None
         
@@ -155,7 +156,7 @@ class AuthService:
         if not usuario or not usuario.activo or usuario.deleted_at is not None:
             return None
         
-        roles = [ur.rol.codigo for ur in usuario.usuarios_roles]
+        roles = [normalize_role(ur.rol.codigo) for ur in usuario.usuarios_roles]
         
         return CurrentUser(
             id=usuario.id,

@@ -3,6 +3,7 @@ UsuarioService: Lógica de negocio para usuarios.
 """
 
 from typing import Optional
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlmodel import Session
@@ -62,19 +63,29 @@ class UsuarioService:
         
         return self._to_detail(usuario)
 
-    def list_usuarios(self, offset: int = 0, limit: int = 20) -> UsuarioList:
+    def list_usuarios(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        include_inactive: bool = False,
+    ) -> UsuarioList:
         """
-        Listar usuarios activos.
+        Listar usuarios con opción de incluir inactivos.
         
         Args:
             offset: Offset de paginación
             limit: Límite de resultados
+            include_inactive: Si True, incluye usuarios inactivos
             
         Returns:
             Lista paginada de usuarios
         """
-        usuarios = self._usuario_repo.get_active_paginated(offset=offset, limit=limit)
-        total = self._usuario_repo.count_active()
+        usuarios = self._usuario_repo.get_paginated(
+            offset=offset,
+            limit=limit,
+            include_inactive=include_inactive,
+        )
+        total = self._usuario_repo.count(include_inactive=include_inactive)
         
         return UsuarioList(
             data=[self._to_public(u) for u in usuarios],
@@ -93,10 +104,10 @@ class UsuarioService:
             Usuario actualizado
             
         Raises:
-            HTTPException: Si usuario no existe o está inactivo
+            HTTPException: Si usuario no existe
         """
         usuario = self._usuario_repo.get_by_id(usuario_id)
-        if not usuario or not usuario.activo or usuario.deleted_at is not None:
+        if not usuario or usuario.deleted_at is not None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Usuario no encontrado",
@@ -111,6 +122,8 @@ class UsuarioService:
             usuario.celular = data.celular
         if data.activo is not None:
             usuario.activo = data.activo
+            if data.activo:
+                usuario.deleted_at = None
         
         usuario = self._usuario_repo.add(usuario)
         self._session.commit()
@@ -134,7 +147,11 @@ class UsuarioService:
                 detail="Usuario no encontrado",
             )
         
-        self._usuario_repo.delete(usuario)
+        now = datetime.now(timezone.utc)
+        usuario.activo = False
+        usuario.deleted_at = now
+        usuario.updated_at = now
+        self._usuario_repo.add(usuario)
         self._session.commit()
 
     # ========================================================================
@@ -368,6 +385,24 @@ class UsuarioService:
         
         return self._direccion_to_public(direccion)
 
+    def set_direccion_principal(self, usuario_id: int, direccion_id: int) -> DireccionEntregaPublic:
+        direccion = self._direccion_repo.get_by_id(direccion_id)
+        if not direccion or direccion.usuario_id != usuario_id or not direccion.activo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dirección no encontrada",
+            )
+
+        principal_actual = self._direccion_repo.get_principal_by_usuario(usuario_id)
+        if principal_actual and principal_actual.id != direccion.id:
+            principal_actual.es_principal = False
+            self._session.add(principal_actual)
+
+        direccion.es_principal = True
+        direccion = self._direccion_repo.add(direccion)
+        self._session.commit()
+        return self._direccion_to_public(direccion)
+
     def delete_direccion(self, usuario_id: int, direccion_id: int) -> None:
         """
         Soft-delete de dirección.
@@ -386,7 +421,11 @@ class UsuarioService:
                 detail="Dirección no encontrada",
             )
         
-        self._direccion_repo.delete(direccion)
+        now = datetime.now(timezone.utc)
+        direccion.activo = False
+        direccion.deleted_at = now
+        direccion.updated_at = now
+        self._direccion_repo.add(direccion)
         self._session.commit()
 
     # ========================================================================

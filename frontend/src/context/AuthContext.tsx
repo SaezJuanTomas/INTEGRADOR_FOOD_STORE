@@ -21,7 +21,10 @@ interface AuthContextValue {
   roles: string[];
   isAuthenticated: boolean;
   isAdmin: boolean;
-  isCliente: boolean;
+  isClient: boolean;
+  isStock: boolean;
+  isPedidos: boolean;
+  hasRole: (role: string) => boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -33,6 +36,16 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
+    const normalizeRole = (role: string): string => role.trim().toUpperCase();
+
+    const hasRole = (role: string): boolean => {
+      const normalized = normalizeRole(role);
+      if (normalized === "CLIENT") {
+        return roles.some((current) => ["CLIENT", "CLIENTE"].includes(normalizeRole(current)));
+      }
+      return roles.some((current) => normalizeRole(current) === normalized);
+    };
+
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<User | null>(() => {
     const stored = localStorage.getItem(USER_KEY);
@@ -54,15 +67,16 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       console.log("🔐 AuthContext.login iniciando...");
       const response = await loginRequest({ email, password });
       console.log("✅ LoginRequest exitoso. Response:", response);
+      const normalizedRoles = (response.roles || []).map((role) => role.trim().toUpperCase());
       
       localStorage.setItem(TOKEN_KEY, response.access_token);
       localStorage.setItem(USER_KEY, JSON.stringify(response.usuario));
-      localStorage.setItem(ROLES_KEY, JSON.stringify(response.roles || []));
+      localStorage.setItem(ROLES_KEY, JSON.stringify(normalizedRoles));
       console.log("💾 Datos guardados en localStorage");
       
       setToken(response.access_token);
       setUser(response.usuario);
-      setRoles(response.roles || []);
+      setRoles(normalizedRoles);
       console.log("🔄 Estado actualizado en AuthContext");
     } catch (error) {
       console.error("❌ Error en AuthContext.login:", error);
@@ -80,8 +94,10 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     setRoles([]);
   };
 
-  const isAdmin = roles.includes("ADMIN");
-  const isCliente = roles.includes("CLIENTE");
+  const isAdmin = hasRole("ADMIN");
+  const isClient = hasRole("CLIENT");
+  const isStock = hasRole("STOCK");
+  const isPedidos = hasRole("PEDIDOS");
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -90,11 +106,14 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
       roles,
       isAuthenticated: Boolean(token),
       isAdmin,
-      isCliente,
+      isClient,
+      isStock,
+      isPedidos,
+      hasRole,
       login,
       logout,
     }),
-    [token, user, roles, isAdmin, isCliente]
+    [token, user, roles, isAdmin, isClient, isStock, isPedidos]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

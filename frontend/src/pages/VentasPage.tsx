@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { listPedidos, type PedidoPublic } from "../services/api";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import {
+  cambiarEstadoPedido,
+  getPedidosWebSocketUrl,
+  listPedidos,
+  type PedidoPublic,
+} from "../services/api";
 
 function asNumber(value: number | string): number {
   return Number(value ?? 0);
 }
 
 export function VentasPage(): JSX.Element {
+  const { hasRole } = useAuth();
   const [pedidos, setPedidos] = useState<PedidoPublic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const canOperate = hasRole("ADMIN") || hasRole("PEDIDOS");
 
   useEffect(() => {
     const cargarVentas = async (): Promise<void> => {
@@ -24,7 +34,38 @@ export function VentasPage(): JSX.Element {
     };
 
     cargarVentas();
+
+    const ws = new WebSocket(getPedidosWebSocketUrl());
+    ws.onmessage = () => {
+      cargarVentas();
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
+
+  const avanzarEstado = async (pedido: PedidoPublic, nuevoEstado: string): Promise<void> => {
+    try {
+      await cambiarEstadoPedido(pedido.id, nuevoEstado);
+      const data = await listPedidos(0, 100);
+      setPedidos(data.data || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo cambiar el estado");
+    }
+  };
+
+  const siguienteEstado = (estado: string): string | null => {
+    const flujo: Record<string, string | null> = {
+      PENDIENTE: "CONFIRMADO",
+      CONFIRMADO: "EN_PREP",
+      EN_PREP: "EN_CAMINO",
+      EN_CAMINO: "ENTREGADO",
+      ENTREGADO: null,
+      CANCELADO: null,
+    };
+    return flujo[estado] ?? null;
+  };
 
   const totalVentas = useMemo(
     () => pedidos.reduce((acc, pedido) => acc + asNumber(pedido.total), 0),
@@ -87,6 +128,8 @@ export function VentasPage(): JSX.Element {
                 <th className="border px-3 py-2">Estado</th>
                 <th className="border px-3 py-2">Fecha</th>
                 <th className="border px-3 py-2">Total</th>
+                <th className="border px-3 py-2">Detalle</th>
+                {canOperate ? <th className="border px-3 py-2">Operación</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -100,11 +143,34 @@ export function VentasPage(): JSX.Element {
                       {pedido.created_at ? new Date(pedido.created_at).toLocaleString("es-AR") : "-"}
                     </td>
                     <td className="border px-3 py-2 font-medium text-orange-900">${asNumber(pedido.total).toFixed(2)}</td>
+                    <td className="border px-3 py-2">
+                      <Link
+                        to={hasRole("ADMIN") ? `/ventas/${pedido.id}` : `/operaciones-pedidos/${pedido.id}`}
+                        className="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800 hover:bg-blue-200"
+                      >
+                        Ver detalle
+                      </Link>
+                    </td>
+                    {canOperate ? (
+                      <td className="border px-3 py-2">
+                        {siguienteEstado(pedido.estado_codigo) ? (
+                          <button
+                            type="button"
+                            onClick={() => avanzarEstado(pedido, siguienteEstado(pedido.estado_codigo) as string)}
+                            className="rounded bg-orange-500 px-2 py-1 text-xs font-semibold text-white hover:bg-orange-600"
+                          >
+                            Pasar a {siguienteEstado(pedido.estado_codigo)}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500">Sin transición</span>
+                        )}
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="border px-3 py-3 text-slate-600" colSpan={5}>
+                  <td className="border px-3 py-3 text-slate-600" colSpan={canOperate ? 7 : 6}>
                     Aún no hay ventas registradas.
                   </td>
                 </tr>

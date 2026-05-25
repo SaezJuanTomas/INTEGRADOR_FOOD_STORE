@@ -16,10 +16,12 @@ PUT /usuarios/{usuario_id}/direcciones/{direccion_id} - Actualizar dirección
 DELETE /usuarios/{usuario_id}/direcciones/{direccion_id} - Eliminar dirección
 """
 
-from fastapi import APIRouter, Depends, Query, status, Header, HTTPException
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlmodel import Session
 
+from app.core.deps import get_current_active_user, require_roles
 from app.core.database import get_session
+from app.core.rbac import ROLE_ADMIN
 from app.modules.usuarios.service import UsuarioService
 from app.modules.usuarios.schemas import (
     UsuarioPublic,
@@ -32,7 +34,6 @@ from app.modules.usuarios.schemas import (
     DireccionEntregaList,
     CurrentUser,
 )
-from app.modules.auth.router import get_current_user
 
 router = APIRouter()
 
@@ -42,14 +43,21 @@ def get_usuario_service(session: Session = Depends(get_session)) -> UsuarioServi
     return UsuarioService(session)
 
 
+def _ensure_self_or_admin(current_user: CurrentUser, usuario_id: int) -> None:
+    if current_user.id != usuario_id and ROLE_ADMIN not in current_user.roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permisos insuficientes")
+
+
 # ============================================================================
 # USUARIOS - CRUD
 # ============================================================================
 
-@router.get("/", response_model=UsuarioList)
+@router.get("", response_model=UsuarioList)
 def list_usuarios(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    include_inactive: bool = Query(default=False),
+    _: CurrentUser = Depends(require_roles([ROLE_ADMIN])),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> UsuarioList:
     """
@@ -58,13 +66,19 @@ def list_usuarios(
     Parámetros:
     - **offset**: Número de registros a saltar (default: 0)
     - **limit**: Número máximo de registros (default: 20, max: 100)
+    - **include_inactive**: Incluir usuarios inactivos (default: false)
     """
-    return svc.list_usuarios(offset=offset, limit=limit)
+    return svc.list_usuarios(
+        offset=offset,
+        limit=limit,
+        include_inactive=include_inactive,
+    )
 
 
 @router.get("/{usuario_id}", response_model=UsuarioDetail)
 def get_usuario(
     usuario_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> UsuarioDetail:
     """
@@ -73,6 +87,7 @@ def get_usuario(
     Parámetros:
     - **usuario_id**: ID del usuario
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.get_usuario(usuario_id)
 
 
@@ -80,6 +95,7 @@ def get_usuario(
 def update_usuario(
     usuario_id: int,
     data: UsuarioUpdate,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> UsuarioDetail:
     """
@@ -92,12 +108,14 @@ def update_usuario(
     - **celular**: Nuevo teléfono (opcional)
     - **activo**: Activar/desactivar usuario (opcional)
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.update_usuario(usuario_id, data)
 
 
 @router.delete("/{usuario_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_usuario(
     usuario_id: int,
+    _: CurrentUser = Depends(require_roles([ROLE_ADMIN])),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> None:
     """
@@ -117,6 +135,7 @@ def delete_usuario(
 def asignar_rol(
     usuario_id: int,
     rol_codigo: str,
+    _: CurrentUser = Depends(require_roles([ROLE_ADMIN])),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> UsuarioDetail:
     """
@@ -133,6 +152,7 @@ def asignar_rol(
 def remover_rol(
     usuario_id: int,
     rol_codigo: str,
+    _: CurrentUser = Depends(require_roles([ROLE_ADMIN])),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> UsuarioDetail:
     """
@@ -153,6 +173,7 @@ def remover_rol(
 def crear_direccion(
     usuario_id: int,
     data: DireccionEntregaCreate,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> DireccionEntregaPublic:
     """
@@ -168,6 +189,7 @@ def crear_direccion(
     - **codigo_postal**: Código postal
     - **es_principal**: Si es la dirección principal (default: false)
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.crear_direccion(usuario_id, data)
 
 
@@ -176,6 +198,7 @@ def list_direcciones(
     usuario_id: int,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> DireccionEntregaList:
     """
@@ -186,6 +209,7 @@ def list_direcciones(
     - **offset**: Número de registros a saltar
     - **limit**: Número máximo de registros
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.list_direcciones(usuario_id, offset=offset, limit=limit)
 
 
@@ -193,6 +217,7 @@ def list_direcciones(
 def get_direccion(
     usuario_id: int,
     direccion_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> DireccionEntregaPublic:
     """
@@ -202,6 +227,7 @@ def get_direccion(
     - **usuario_id**: ID del usuario
     - **direccion_id**: ID de la dirección
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.get_direccion(usuario_id, direccion_id)
 
 
@@ -210,6 +236,7 @@ def update_direccion(
     usuario_id: int,
     direccion_id: int,
     data: DireccionEntregaUpdate,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> DireccionEntregaPublic:
     """
@@ -226,13 +253,26 @@ def update_direccion(
     - **codigo_postal**: Nuevo código postal (opcional)
     - **es_principal**: Cambiar si es principal (opcional)
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     return svc.update_direccion(usuario_id, direccion_id, data)
+
+
+@router.patch("/{usuario_id}/direcciones/{direccion_id}/principal", response_model=DireccionEntregaPublic)
+def set_direccion_principal(
+    usuario_id: int,
+    direccion_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
+    svc: UsuarioService = Depends(get_usuario_service),
+) -> DireccionEntregaPublic:
+    _ensure_self_or_admin(current_user, usuario_id)
+    return svc.set_direccion_principal(usuario_id, direccion_id)
 
 
 @router.delete("/{usuario_id}/direcciones/{direccion_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_direccion(
     usuario_id: int,
     direccion_id: int,
+    current_user: CurrentUser = Depends(get_current_active_user),
     svc: UsuarioService = Depends(get_usuario_service),
 ) -> None:
     """
@@ -242,4 +282,5 @@ def delete_direccion(
     - **usuario_id**: ID del usuario
     - **direccion_id**: ID de la dirección
     """
+    _ensure_self_or_admin(current_user, usuario_id)
     svc.delete_direccion(usuario_id, direccion_id)

@@ -7,14 +7,14 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRoles }: ProtectedRouteProps): JSX.Element {
-  const { isAuthenticated, roles } = useAuth();
+  const { isAuthenticated, hasRole } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 
   if (requiredRoles && requiredRoles.length > 0) {
-    const hasRequiredRole = requiredRoles.some(role => roles.includes(role));
+    const hasRequiredRole = requiredRoles.some((role) => hasRole(role));
     if (!hasRequiredRole) {
       return <Navigate to="/access-denied" replace />;
     }

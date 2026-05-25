@@ -10,6 +10,19 @@ from typing import Optional, List
 from fastapi import HTTPException, status
 from sqlmodel import Session
 
+from app.core.rbac import (
+    ROLE_ADMIN,
+    ROLE_PEDIDOS,
+    STATE_CANCELADO,
+    STATE_CONFIRMADO,
+    STATE_EN_CAMINO,
+    STATE_EN_PREP,
+    STATE_ENTREGADO,
+    STATE_PENDIENTE,
+    normalize_role,
+    normalize_state,
+)
+from app.core.websocket import manager
 from app.models import (
     Pedido,
     DetallePedido,
@@ -45,12 +58,21 @@ class PedidoService:
 
     # Transiciones de estado válidas
     TRANSICIONES_VALIDAS = {
-        "PENDIENTE": ["CONFIRMADO", "CANCELADO"],
-        "CONFIRMADO": ["PREPARANDO", "CANCELADO"],
-        "PREPARANDO": ["EN_CAMINO"],
-        "EN_CAMINO": ["ENTREGADO"],
-        "ENTREGADO": [],
-        "CANCELADO": [],
+        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_CANCELADO],
+        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO],
+        STATE_EN_PREP: [STATE_EN_CAMINO],
+        STATE_EN_CAMINO: [STATE_ENTREGADO],
+        STATE_ENTREGADO: [],
+        STATE_CANCELADO: [],
+    }
+
+    EVENTOS_WS = {
+        STATE_PENDIENTE: "PEDIDO_CREADO",
+        STATE_CONFIRMADO: "PEDIDO_CONFIRMADO",
+        STATE_EN_PREP: "PEDIDO_EN_PREP",
+        STATE_EN_CAMINO: "PEDIDO_EN_CAMINO",
+        STATE_ENTREGADO: "PEDIDO_ENTREGADO",
+        STATE_CANCELADO: "PEDIDO_CANCELADO",
     }
 
     def __init__(self, session: Session):
@@ -59,6 +81,16 @@ class PedidoService:
         self._detalle_repo = DetallePedidoRepository(session)
         self._estado_repo = EstadoPedidoRepository(session)
         self._historial_repo = HistorialEstadoPedidoRepository(session)
+
+    def _can_manage_all(self, roles: list[str]) -> bool:
+        normalized = {normalize_role(role) for role in roles}
+        return ROLE_ADMIN in normalized or ROLE_PEDIDOS in normalized
+
+    async def _broadcast_event(self, estado_codigo: str, pedido: Pedido) -> None:
+        event = self.EVENTOS_WS.get(estado_codigo)
+        if event is None:
+            return
+        await manager.broadcast(event, self._to_public(pedido).model_dump())
 
     # ========================================================================
     # CREAR PEDIDO
@@ -150,20 +182,21 @@ class PedidoService:
         
         # Obtener estado PENDIENTE
         estado_pendiente = self._session.query(EstadoPedido).filter(
-            EstadoPedido.codigo == "PENDIENTE"
+            EstadoPedido.codigo == STATE_PENDIENTE
         ).first()
         
         if not estado_pendiente:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Estado PENDIENTE no configurado",
+                detail=f"Estado {STATE_PENDIENTE} no configurado",
             )
         
         # Crear pedido
         pedido = Pedido(
             usuario_id=usuario_id,
             direccion_entrega_id=data.direccion_entrega_id,
-            estado_codigo="PENDIENTE",
+            forma_pago_codigo=data.forma_pago_codigo,
+            estado_codigo=STATE_PENDIENTE,
             subtotal=subtotal,
             descuento=data.descuento,
             costo_envio=costo_envio,
@@ -196,14 +229,14 @@ class PedidoService:
             estado_codigo=pedido.estado_codigo,
             total=pedido.total,
             detalles=[self._detalle_to_public(d) for d in detalles],
-            mensaje="Pedido creado exitosamente en estado PENDIENTE",
+            mensaje=f"Pedido creado exitosamente en estado {STATE_PENDIENTE}",
         )
 
     # ========================================================================
     # CONFIRMAR PEDIDO
     # ========================================================================
 
-    def confirmar_pedido(self, usuario_id: int, pedido_id: int) -> ConfirmarPedidoResponse:
+    async def confirmar_pedido(self, usuario_id: int, pedido_id: int) -> ConfirmarPedidoResponse:
         """
         Confirmar pedido (PENDIENTE → CONFIRMADO).
         - Descontar stock
@@ -223,14 +256,14 @@ class PedidoService:
         pedido = self._get_pedido_seguro(usuario_id, pedido_id)
         
         # Validar estado actual
-        if pedido.estado_codigo != "PENDIENTE":
+        if pedido.estado_codigo != STATE_PENDIENTE:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Pedido en estado {pedido.estado_codigo}, no puede confirmarse",
             )
         
         # Validar transición
-        if "CONFIRMADO" not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
+        if STATE_CONFIRMADO not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Transición de estado no permitida",
@@ -249,14 +282,14 @@ class PedidoService:
         
         # Cambiar estado
         pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = "CONFIRMADO"
+        pedido.estado_codigo = STATE_CONFIRMADO
         pedido = self._pedido_repo.add(pedido)
         
         # Registrar historial
         historial = HistorialEstadoPedido(
             pedido_id=pedido_id,
             estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo="CONFIRMADO",
+            estado_hacia_codigo=STATE_CONFIRMADO,
             usuario_id=usuario_id,
             motivo="Pedido confirmado por usuario",
             fecha=datetime.now(timezone.utc),
@@ -265,6 +298,7 @@ class PedidoService:
         
         self._session.commit()
         self._session.refresh(pedido)
+        await self._broadcast_event(pedido.estado_codigo, pedido)
         
         return ConfirmarPedidoResponse(
             id=pedido.id,
@@ -278,7 +312,13 @@ class PedidoService:
     # CANCELAR PEDIDO
     # ========================================================================
 
-    def cancelar_pedido(self, usuario_id: int, pedido_id: int, motivo: Optional[str] = None) -> PedidoDetail:
+    async def cancelar_pedido(
+        self,
+        usuario_id: int,
+        pedido_id: int,
+        roles: list[str],
+        motivo: Optional[str] = None,
+    ) -> PedidoDetail:
         """
         Cancelar pedido.
         Validar que puede cancelarse, cambiar estado a CANCELADO.
@@ -294,17 +334,17 @@ class PedidoService:
         Raises:
             HTTPException: Si pedido no puede cancelarse
         """
-        pedido = self._get_pedido_seguro(usuario_id, pedido_id)
+        pedido = self._get_pedido_seguro(usuario_id, pedido_id, roles)
         
         # Estados que pueden cancelarse: PENDIENTE, CONFIRMADO
-        if pedido.estado_codigo not in ["PENDIENTE", "CONFIRMADO"]:
+        if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
             )
         
         # Si estaba confirmado, restaurar stock
-        if pedido.estado_codigo == "CONFIRMADO":
+        if pedido.estado_codigo == STATE_CONFIRMADO:
             detalles = self._detalle_repo.get_by_pedido_id(pedido_id)
             for detalle in detalles:
                 producto = self._session.query(Producto).filter(
@@ -317,14 +357,14 @@ class PedidoService:
         
         # Cambiar estado
         pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = "CANCELADO"
+        pedido.estado_codigo = STATE_CANCELADO
         pedido = self._pedido_repo.add(pedido)
         
         # Registrar historial
         historial = HistorialEstadoPedido(
             pedido_id=pedido_id,
             estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo="CANCELADO",
+            estado_hacia_codigo=STATE_CANCELADO,
             usuario_id=usuario_id,
             motivo=motivo or "Pedido cancelado",
             fecha=datetime.now(timezone.utc),
@@ -333,6 +373,7 @@ class PedidoService:
         
         self._session.commit()
         self._session.refresh(pedido)
+        await self._broadcast_event(pedido.estado_codigo, pedido)
         
         return self._to_detail(pedido)
 
@@ -340,7 +381,7 @@ class PedidoService:
     # CAMBIAR ESTADO
     # ========================================================================
 
-    def cambiar_estado(
+    async def cambiar_estado(
         self,
         usuario_id: int,
         pedido_id: int,
@@ -369,41 +410,43 @@ class PedidoService:
             )
         
         # Verificar estado destino existe
+        estado_destino_codigo = normalize_state(data.estado_codigo)
         estado_destino = self._session.query(EstadoPedido).filter(
-            EstadoPedido.codigo == data.estado_codigo
+            EstadoPedido.codigo == estado_destino_codigo
         ).first()
         if not estado_destino:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Estado {data.estado_codigo} no existe",
+                detail=f"Estado {estado_destino_codigo} no existe",
             )
         
         # Validar transición
         transiciones_validas = self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, [])
-        if data.estado_codigo not in transiciones_validas:
+        if estado_destino_codigo not in transiciones_validas:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Transición de {pedido.estado_codigo} a {data.estado_codigo} no permitida",
+                detail=f"Transición de {pedido.estado_codigo} a {estado_destino_codigo} no permitida",
             )
         
         # Cambiar estado
         pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = data.estado_codigo
+        pedido.estado_codigo = estado_destino_codigo
         pedido = self._pedido_repo.add(pedido)
         
         # Registrar historial
         historial = HistorialEstadoPedido(
             pedido_id=pedido_id,
             estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo=data.estado_codigo,
+            estado_hacia_codigo=estado_destino_codigo,
             usuario_id=usuario_id,
-            motivo=data.motivo or f"Cambio de estado a {data.estado_codigo}",
+            motivo=data.motivo or f"Cambio de estado a {estado_destino_codigo}",
             fecha=datetime.now(timezone.utc),
         )
         self._historial_repo.add(historial)
         
         self._session.commit()
         self._session.refresh(pedido)
+        await self._broadcast_event(pedido.estado_codigo, pedido)
         
         return self._to_detail(pedido)
 
@@ -411,7 +454,7 @@ class PedidoService:
     # OBTENER PEDIDOS
     # ========================================================================
 
-    def get_pedido(self, usuario_id: int, pedido_id: int) -> PedidoDetail:
+    def get_pedido(self, usuario_id: int, pedido_id: int, roles: list[str]) -> PedidoDetail:
         """
         Obtener detalle de pedido.
         
@@ -425,7 +468,7 @@ class PedidoService:
         Raises:
             HTTPException: Si pedido no existe o no pertenece al usuario
         """
-        pedido = self._get_pedido_seguro(usuario_id, pedido_id)
+        pedido = self._get_pedido_seguro(usuario_id, pedido_id, roles)
         return self._to_detail(pedido)
 
     def list_pedidos(
@@ -433,7 +476,7 @@ class PedidoService:
         usuario_id: int,
         offset: int = 0,
         limit: int = 20,
-        is_admin: bool = False,
+        roles: list[str] | None = None,
     ) -> PedidoList:
         """
         Listar pedidos del usuario.
@@ -446,7 +489,8 @@ class PedidoService:
         Returns:
             Lista paginada de pedidos
         """
-        if is_admin:
+        roles = roles or []
+        if self._can_manage_all(roles):
             pedidos = self._pedido_repo.get_all(offset=offset, limit=limit)
             total = self._pedido_repo.count_all()
         else:
@@ -462,7 +506,7 @@ class PedidoService:
     # HISTORIAL
     # ========================================================================
 
-    def get_historial(self, usuario_id: int, pedido_id: int) -> HistorialEstadoPedidoList:
+    def get_historial(self, usuario_id: int, pedido_id: int, roles: list[str]) -> HistorialEstadoPedidoList:
         """
         Obtener historial de cambios de estado.
         
@@ -477,7 +521,7 @@ class PedidoService:
             HTTPException: Si pedido no existe o no pertenece al usuario
         """
         # Verificar que el pedido pertenece al usuario
-        self._get_pedido_seguro(usuario_id, pedido_id)
+        self._get_pedido_seguro(usuario_id, pedido_id, roles)
         
         historiales = self._historial_repo.get_by_pedido_id(pedido_id)
         
@@ -489,18 +533,25 @@ class PedidoService:
     # HELPERS
     # ========================================================================
 
-    def _get_pedido_seguro(self, usuario_id: int, pedido_id: int) -> Pedido:
+    def _get_pedido_seguro(self, usuario_id: int, pedido_id: int, roles: list[str] | None = None) -> Pedido:
         """
         Obtener pedido verificando que pertenece al usuario y no está eliminado.
         
         Raises:
             HTTPException: Si pedido no existe o no pertenece al usuario
         """
-        pedido = self._session.query(Pedido).filter(
-            Pedido.id == pedido_id,
-            Pedido.usuario_id == usuario_id,
-            Pedido.deleted_at.is_(None),
-        ).first()
+        roles = roles or []
+        if self._can_manage_all(roles):
+            pedido = self._session.query(Pedido).filter(
+                Pedido.id == pedido_id,
+                Pedido.deleted_at.is_(None),
+            ).first()
+        else:
+            pedido = self._session.query(Pedido).filter(
+                Pedido.id == pedido_id,
+                Pedido.usuario_id == usuario_id,
+                Pedido.deleted_at.is_(None),
+            ).first()
         
         if not pedido:
             raise HTTPException(
@@ -516,6 +567,7 @@ class PedidoService:
             id=pedido.id,
             usuario_id=pedido.usuario_id,
             direccion_entrega_id=pedido.direccion_entrega_id,
+            forma_pago_codigo=pedido.forma_pago_codigo,
             estado_codigo=pedido.estado_codigo,
             subtotal=pedido.subtotal,
             descuento=pedido.descuento,
@@ -537,6 +589,7 @@ class PedidoService:
             id=pedido.id,
             usuario_id=pedido.usuario_id,
             direccion_entrega_id=pedido.direccion_entrega_id,
+            forma_pago_codigo=pedido.forma_pago_codigo,
             estado_codigo=pedido.estado_codigo,
             subtotal=pedido.subtotal,
             descuento=pedido.descuento,
