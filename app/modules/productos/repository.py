@@ -87,6 +87,17 @@ class ProductoRepository(BaseRepository[Producto]):
                 )
             )
 
+    def get_active_by_id(self, producto_id: int) -> Producto | None:
+        statement = (
+            select(Producto)
+            .where(
+                Producto.id == producto_id,
+                Producto.activo.is_(True),
+                Producto.deleted_at.is_(None),
+            )
+        )
+        return self.session.exec(statement).first()
+
     def get_disponibles(self, offset: int = 0, limit: int = 100) -> list[Producto]:
         """Obtener todos los productos disponibles."""
         statement = (

@@ -27,6 +27,18 @@ class DireccionEntregaRepository(BaseRepository[DireccionEntrega]):
         )
         return self.session.exec(statement).all()
 
+    def get_by_id_and_usuario(self, direccion_id: int, usuario_id: int) -> DireccionEntrega | None:
+        statement = (
+            select(DireccionEntrega)
+            .where(
+                DireccionEntrega.id == direccion_id,
+                DireccionEntrega.usuario_id == usuario_id,
+                DireccionEntrega.activo.is_(True),
+                DireccionEntrega.deleted_at.is_(None),
+            )
+        )
+        return self.session.exec(statement).first()
+
     def get_principal_by_usuario(self, usuario_id: int) -> DireccionEntrega | None:
         """Obtener dirección principal de un usuario."""
         statement = (

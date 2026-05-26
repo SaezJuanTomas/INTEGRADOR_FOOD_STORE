@@ -1,11 +1,6 @@
-"""
-PedidoService: Lógica de negocio para pedidos.
-Maneja creación, confirmación, cancelación y cambios de estado.
-"""
-
 from decimal import Decimal
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlmodel import Session
@@ -28,14 +23,12 @@ from app.models import (
     DetallePedido,
     HistorialEstadoPedido,
     EstadoPedido,
-    Producto,
-    Usuario,
-    DireccionEntrega,
 )
 from app.modules.pedidos.pedido_repository import PedidoRepository
 from app.modules.pedidos.detalle_pedido_repository import DetallePedidoRepository
 from app.modules.pedidos.estado_pedido_repository import EstadoPedidoRepository
 from app.modules.pedidos.historial_estado_pedido_repository import HistorialEstadoPedidoRepository
+from app.modules.pedidos.unit_of_work import PedidoUnitOfWork
 from app.modules.pedidos.schemas import (
     PedidoCreate,
     PedidoPublic,
@@ -53,17 +46,22 @@ from app.modules.pedidos.schemas import (
 class PedidoService:
     """
     Servicio de negocio para Pedido.
+    Usa PedidoUnitOfWork para transacciones atómicas.
     Implementa reglas de negocio, transiciones de estado, y validaciones.
     """
 
-    # Transiciones de estado válidas
     TRANSICIONES_VALIDAS = {
         STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_CANCELADO],
-        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO],
-        STATE_EN_PREP: [STATE_EN_CAMINO],
-        STATE_EN_CAMINO: [STATE_ENTREGADO],
+        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO, STATE_PENDIENTE],
+        STATE_EN_PREP: [STATE_EN_CAMINO, STATE_CONFIRMADO],
+        STATE_EN_CAMINO: [STATE_ENTREGADO, STATE_EN_PREP],
         STATE_ENTREGADO: [],
-        STATE_CANCELADO: [],
+        STATE_CANCELADO: [STATE_PENDIENTE],
+    }
+
+    TRANSICIONES_STOCK = {
+        (STATE_CONFIRMADO, STATE_PENDIENTE): "restore",
+        (STATE_CANCELADO, STATE_PENDIENTE): "reopen",
     }
 
     EVENTOS_WS = {
@@ -75,7 +73,7 @@ class PedidoService:
         STATE_CANCELADO: "PEDIDO_CANCELADO",
     }
 
-    def __init__(self, session: Session):
+    def __init__(self, session: Session) -> None:
         self._session = session
         self._pedido_repo = PedidoRepository(session)
         self._detalle_repo = DetallePedidoRepository(session)
@@ -97,139 +95,98 @@ class PedidoService:
     # ========================================================================
 
     def crear_pedido(self, usuario_id: int, data: PedidoCreate) -> ConfirmarPedidoResponse:
-        """
-        Crear nuevo pedido.
-        Validar stock, generar snapshots, calcular totales.
-        
-        Args:
-            usuario_id: ID del usuario
-            data: Datos del pedido (dirección, detalles, descuento, notas)
-            
-        Returns:
-            Pedido creado con detalles y cálculos
-            
-        Raises:
-            HTTPException: Si hay errores de validación o stock
-        """
-        # Verificar usuario
-        usuario = self._session.query(Usuario).filter(Usuario.id == usuario_id).first()
-        if not usuario or not usuario.activo or usuario.deleted_at is not None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Usuario no encontrado",
-            )
-        
-        # Verificar dirección
-        direccion = self._session.query(DireccionEntrega).filter(
-            DireccionEntrega.id == data.direccion_entrega_id,
-            DireccionEntrega.usuario_id == usuario_id,
-            DireccionEntrega.activo.is_(True),
-        ).first()
-        if not direccion:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Dirección de entrega no encontrada",
-            )
-        
-        # Validar detalles y calcular totales
-        detalles_list = []
-        subtotal = Decimal("0")
-        
-        for detalle_data in data.detalles:
-            producto = self._session.query(Producto).filter(
-                Producto.id == detalle_data.producto_id,
-                Producto.activo.is_(True),
-                Producto.deleted_at.is_(None),
-            ).first()
-            
-            if not producto:
+        with PedidoUnitOfWork(self._session) as uow:
+            usuario = uow.usuarios.get_by_id(usuario_id)
+            if not usuario or not usuario.activo or usuario.deleted_at is not None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Producto {detalle_data.producto_id} no encontrado",
+                    detail="Usuario no encontrado",
                 )
-            
-            # Validar disponibilidad
-            if not producto.disponible:
+
+            direccion = uow.direcciones.get_by_id_and_usuario(data.direccion_entrega_id, usuario_id)
+            if not direccion:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Producto {producto.nombre} no disponible",
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Dirección de entrega no encontrada",
                 )
-            
-            # Validar stock si usa stock manual
-            if producto.usa_stock_manual:
-                if producto.stock_manual is None or producto.stock_manual < detalle_data.cantidad:
+
+            detalles_list = []
+            subtotal = Decimal("0")
+
+            for detalle_data in data.detalles:
+                producto = uow.productos.get_active_by_id(detalle_data.producto_id)
+                if not producto:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Producto {detalle_data.producto_id} no encontrado",
+                    )
+
+                if not producto.disponible:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Stock insuficiente para {producto.nombre}",
+                        detail=f"Producto {producto.nombre} no disponible",
                     )
-            
-            # Crear snapshot
-            subtotal_detalle = producto.precio_base * Decimal(detalle_data.cantidad)
-            detalles_list.append({
-                "producto_id": producto.id,
-                "cantidad": detalle_data.cantidad,
-                "nombre_snapshot": producto.nombre,
-                "precio_snapshot": producto.precio_base,
-                "subtotal_snapshot": subtotal_detalle,
-            })
-            
-            subtotal += subtotal_detalle
-        
-        # Calcular totales
-        # NOTA: costo_envio es 0 por ahora (puede implementarse después)
-        costo_envio = Decimal("0")
-        total = subtotal - data.descuento + costo_envio
-        
-        # Obtener estado PENDIENTE
-        estado_pendiente = self._session.query(EstadoPedido).filter(
-            EstadoPedido.codigo == STATE_PENDIENTE
-        ).first()
-        
-        if not estado_pendiente:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Estado {STATE_PENDIENTE} no configurado",
+
+                if producto.usa_stock_manual:
+                    if producto.stock_manual is None or producto.stock_manual < detalle_data.cantidad:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Stock insuficiente para {producto.nombre}",
+                        )
+
+                subtotal_detalle = producto.precio_base * Decimal(detalle_data.cantidad)
+                detalles_list.append({
+                    "producto_id": producto.id,
+                    "cantidad": detalle_data.cantidad,
+                    "nombre_snapshot": producto.nombre,
+                    "precio_snapshot": producto.precio_base,
+                    "subtotal_snapshot": subtotal_detalle,
+                })
+                subtotal += subtotal_detalle
+
+            costo_envio = Decimal("0")
+            total = subtotal - data.descuento + costo_envio
+
+            estado_pendiente = uow.estados.get_by_codigo(STATE_PENDIENTE)
+            if not estado_pendiente:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Estado {STATE_PENDIENTE} no configurado",
+                )
+
+            pedido = Pedido(
+                usuario_id=usuario_id,
+                direccion_entrega_id=data.direccion_entrega_id,
+                forma_pago_codigo=data.forma_pago_codigo,
+                estado_codigo=STATE_PENDIENTE,
+                subtotal=subtotal,
+                descuento=data.descuento,
+                costo_envio=costo_envio,
+                total=total,
+                notas=data.notas,
             )
-        
-        # Crear pedido
-        pedido = Pedido(
-            usuario_id=usuario_id,
-            direccion_entrega_id=data.direccion_entrega_id,
-            forma_pago_codigo=data.forma_pago_codigo,
-            estado_codigo=STATE_PENDIENTE,
-            subtotal=subtotal,
-            descuento=data.descuento,
-            costo_envio=costo_envio,
-            total=total,
-            notas=data.notas,
-        )
-        
-        pedido = self._pedido_repo.add(pedido)
-        self._session.flush()  # Obtener ID del pedido
-        
-        # Crear detalles
-        for detalle_data in detalles_list:
-            detalle = DetallePedido(
-                pedido_id=pedido.id,
-                producto_id=detalle_data["producto_id"],
-                cantidad=detalle_data["cantidad"],
-                nombre_snapshot=detalle_data["nombre_snapshot"],
-                precio_snapshot=detalle_data["precio_snapshot"],
-                subtotal_snapshot=detalle_data["subtotal_snapshot"],
-            )
-            self._detalle_repo.add(detalle)
-        
-        self._session.commit()
-        self._session.refresh(pedido)
-        
-        # Retornar respuesta
-        detalles = self._detalle_repo.get_by_pedido_id(pedido.id)
+
+            pedido = uow.pedidos.add(pedido)
+
+            for detalle_data in detalles_list:
+                detalle = DetallePedido(
+                    pedido_id=pedido.id,
+                    producto_id=detalle_data["producto_id"],
+                    cantidad=detalle_data["cantidad"],
+                    nombre_snapshot=detalle_data["nombre_snapshot"],
+                    precio_snapshot=detalle_data["precio_snapshot"],
+                    subtotal_snapshot=detalle_data["subtotal_snapshot"],
+                )
+                uow.detalles.add(detalle)
+
+            detalles = uow.detalles.get_by_pedido_id(pedido.id)
+
         return ConfirmarPedidoResponse(
             id=pedido.id,
             estado_codigo=pedido.estado_codigo,
             total=pedido.total,
             detalles=[self._detalle_to_public(d) for d in detalles],
-            mensaje=f"Pedido creado exitosamente en estado {STATE_PENDIENTE}",
+            mensaje="Pedido creado. Pendiente de confirmar por el administrador.",
         )
 
     # ========================================================================
@@ -237,69 +194,44 @@ class PedidoService:
     # ========================================================================
 
     async def confirmar_pedido(self, usuario_id: int, pedido_id: int) -> ConfirmarPedidoResponse:
-        """
-        Confirmar pedido (PENDIENTE → CONFIRMADO).
-        - Descontar stock
-        - Cambiar estado a CONFIRMADO
-        - Registrar historial
-        
-        Args:
-            usuario_id: ID del usuario
-            pedido_id: ID del pedido
-            
-        Returns:
-            Pedido confirmado
-            
-        Raises:
-            HTTPException: Si pedido no existe o no puede confirmarse
-        """
-        pedido = self._get_pedido_seguro(usuario_id, pedido_id)
-        
-        # Validar estado actual
-        if pedido.estado_codigo != STATE_PENDIENTE:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Pedido en estado {pedido.estado_codigo}, no puede confirmarse",
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id)
+
+            if pedido.estado_codigo != STATE_PENDIENTE:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Pedido en estado {pedido.estado_codigo}, no puede confirmarse",
+                )
+
+            if STATE_CONFIRMADO not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Transición de estado no permitida",
+                )
+
+            detalles = uow.detalles.get_by_pedido_id(pedido_id)
+            for detalle in detalles:
+                producto = uow.productos.get_by_id(detalle.producto_id)
+                if producto and producto.usa_stock_manual and producto.stock_manual is not None:
+                    producto.stock_manual -= detalle.cantidad
+                    uow.productos.add(producto)
+
+            pedido_anterior_codigo = pedido.estado_codigo
+            pedido.estado_codigo = STATE_CONFIRMADO
+            pedido = uow.pedidos.add(pedido)
+
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido_id,
+                estado_desde_codigo=pedido_anterior_codigo,
+                estado_hacia_codigo=STATE_CONFIRMADO,
+                usuario_id=usuario_id,
+                motivo="Pedido confirmado por usuario",
+                fecha=datetime.now(timezone.utc),
             )
-        
-        # Validar transición
-        if STATE_CONFIRMADO not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Transición de estado no permitida",
-            )
-        
-        # Descontar stock
-        detalles = self._detalle_repo.get_by_pedido_id(pedido_id)
-        for detalle in detalles:
-            producto = self._session.query(Producto).filter(
-                Producto.id == detalle.producto_id
-            ).first()
-            
-            if producto and producto.usa_stock_manual and producto.stock_manual is not None:
-                producto.stock_manual -= detalle.cantidad
-                self._session.add(producto)
-        
-        # Cambiar estado
-        pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = STATE_CONFIRMADO
-        pedido = self._pedido_repo.add(pedido)
-        
-        # Registrar historial
-        historial = HistorialEstadoPedido(
-            pedido_id=pedido_id,
-            estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo=STATE_CONFIRMADO,
-            usuario_id=usuario_id,
-            motivo="Pedido confirmado por usuario",
-            fecha=datetime.now(timezone.utc),
-        )
-        self._historial_repo.add(historial)
-        
-        self._session.commit()
-        self._session.refresh(pedido)
+            uow.historial.add(historial)
+
         await self._broadcast_event(pedido.estado_codigo, pedido)
-        
+
         return ConfirmarPedidoResponse(
             id=pedido.id,
             estado_codigo=pedido.estado_codigo,
@@ -319,66 +251,44 @@ class PedidoService:
         roles: list[str],
         motivo: Optional[str] = None,
     ) -> PedidoDetail:
-        """
-        Cancelar pedido.
-        Validar que puede cancelarse, cambiar estado a CANCELADO.
-        
-        Args:
-            usuario_id: ID del usuario
-            pedido_id: ID del pedido
-            motivo: Razón de cancelación (opcional)
-            
-        Returns:
-            Pedido cancelado
-            
-        Raises:
-            HTTPException: Si pedido no puede cancelarse
-        """
-        pedido = self._get_pedido_seguro(usuario_id, pedido_id, roles)
-        
-        # Estados que pueden cancelarse: PENDIENTE, CONFIRMADO
-        if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
+
+            if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
+                )
+
+            if pedido.estado_codigo == STATE_CONFIRMADO:
+                detalles = uow.detalles.get_by_pedido_id(pedido_id)
+                for detalle in detalles:
+                    producto = uow.productos.get_by_id(detalle.producto_id)
+                    if producto and producto.usa_stock_manual and producto.stock_manual is not None:
+                        producto.stock_manual += detalle.cantidad
+                        uow.productos.add(producto)
+
+            pedido_anterior_codigo = pedido.estado_codigo
+            pedido.estado_codigo = STATE_CANCELADO
+            pedido = uow.pedidos.add(pedido)
+
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido_id,
+                estado_desde_codigo=pedido_anterior_codigo,
+                estado_hacia_codigo=STATE_CANCELADO,
+                usuario_id=usuario_id,
+                motivo=motivo or "Pedido cancelado",
+                fecha=datetime.now(timezone.utc),
             )
-        
-        # Si estaba confirmado, restaurar stock
-        if pedido.estado_codigo == STATE_CONFIRMADO:
-            detalles = self._detalle_repo.get_by_pedido_id(pedido_id)
-            for detalle in detalles:
-                producto = self._session.query(Producto).filter(
-                    Producto.id == detalle.producto_id
-                ).first()
-                
-                if producto and producto.usa_stock_manual and producto.stock_manual is not None:
-                    producto.stock_manual += detalle.cantidad
-                    self._session.add(producto)
-        
-        # Cambiar estado
-        pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = STATE_CANCELADO
-        pedido = self._pedido_repo.add(pedido)
-        
-        # Registrar historial
-        historial = HistorialEstadoPedido(
-            pedido_id=pedido_id,
-            estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo=STATE_CANCELADO,
-            usuario_id=usuario_id,
-            motivo=motivo or "Pedido cancelado",
-            fecha=datetime.now(timezone.utc),
-        )
-        self._historial_repo.add(historial)
-        
-        self._session.commit()
-        self._session.refresh(pedido)
+            uow.historial.add(historial)
+
+            result = self._to_detail(pedido)
+
         await self._broadcast_event(pedido.estado_codigo, pedido)
-        
-        return self._to_detail(pedido)
+        return result
 
     # ========================================================================
-    # CAMBIAR ESTADO
+    # CAMBIAR ESTADO (ADMIN)
     # ========================================================================
 
     async def cambiar_estado(
@@ -387,89 +297,66 @@ class PedidoService:
         pedido_id: int,
         data: CambiarEstadoPedidoRequest,
     ) -> PedidoDetail:
-        """
-        Cambiar estado del pedido.
-        Validar transición permitida.
-        
-        Args:
-            usuario_id: ID del usuario (admin)
-            pedido_id: ID del pedido
-            data: Nuevo estado y motivo
-            
-        Returns:
-            Pedido con nuevo estado
-            
-        Raises:
-            HTTPException: Si transición no es válida
-        """
-        pedido = self._session.query(Pedido).filter(Pedido.id == pedido_id).first()
-        if not pedido or pedido.deleted_at is not None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pedido no encontrado",
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = uow.pedidos.get_by_id_no_deleted(pedido_id)
+            if not pedido:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Pedido no encontrado",
+                )
+
+            estado_destino_codigo = normalize_state(data.estado_codigo)
+            estado_destino = uow.estados.get_by_codigo(estado_destino_codigo)
+            if not estado_destino:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Estado {estado_destino_codigo} no existe",
+                )
+
+            transiciones_validas = self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, [])
+            if estado_destino_codigo not in transiciones_validas:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Transición de {pedido.estado_codigo} a {estado_destino_codigo} no permitida",
+                )
+
+            accion_stock = self.TRANSICIONES_STOCK.get((pedido.estado_codigo, estado_destino_codigo))
+            if accion_stock == "restore":
+                detalles = uow.detalles.get_by_pedido_id(pedido_id)
+                for detalle in detalles:
+                    producto = uow.productos.get_by_id(detalle.producto_id)
+                    if producto and producto.usa_stock_manual and producto.stock_manual is not None:
+                        producto.stock_manual += detalle.cantidad
+                        uow.productos.add(producto)
+
+            pedido_anterior_codigo = pedido.estado_codigo
+            pedido.estado_codigo = estado_destino_codigo
+            pedido = uow.pedidos.add(pedido)
+
+            historial = HistorialEstadoPedido(
+                pedido_id=pedido_id,
+                estado_desde_codigo=pedido_anterior_codigo,
+                estado_hacia_codigo=estado_destino_codigo,
+                usuario_id=usuario_id,
+                motivo=data.motivo or f"Cambio de estado a {estado_destino_codigo}",
+                fecha=datetime.now(timezone.utc),
             )
-        
-        # Verificar estado destino existe
-        estado_destino_codigo = normalize_state(data.estado_codigo)
-        estado_destino = self._session.query(EstadoPedido).filter(
-            EstadoPedido.codigo == estado_destino_codigo
-        ).first()
-        if not estado_destino:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Estado {estado_destino_codigo} no existe",
-            )
-        
-        # Validar transición
-        transiciones_validas = self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, [])
-        if estado_destino_codigo not in transiciones_validas:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Transición de {pedido.estado_codigo} a {estado_destino_codigo} no permitida",
-            )
-        
-        # Cambiar estado
-        pedido_anterior_codigo = pedido.estado_codigo
-        pedido.estado_codigo = estado_destino_codigo
-        pedido = self._pedido_repo.add(pedido)
-        
-        # Registrar historial
-        historial = HistorialEstadoPedido(
-            pedido_id=pedido_id,
-            estado_desde_codigo=pedido_anterior_codigo,
-            estado_hacia_codigo=estado_destino_codigo,
-            usuario_id=usuario_id,
-            motivo=data.motivo or f"Cambio de estado a {estado_destino_codigo}",
-            fecha=datetime.now(timezone.utc),
-        )
-        self._historial_repo.add(historial)
-        
-        self._session.commit()
-        self._session.refresh(pedido)
+            uow.historial.add(historial)
+
+            result = self._to_detail(pedido)
+
         await self._broadcast_event(pedido.estado_codigo, pedido)
-        
-        return self._to_detail(pedido)
+        return result
 
     # ========================================================================
     # OBTENER PEDIDOS
     # ========================================================================
 
     def get_pedido(self, usuario_id: int, pedido_id: int, roles: list[str]) -> PedidoDetail:
-        """
-        Obtener detalle de pedido.
-        
-        Args:
-            usuario_id: ID del usuario
-            pedido_id: ID del pedido
-            
-        Returns:
-            Pedido con detalles
-            
-        Raises:
-            HTTPException: Si pedido no existe o no pertenece al usuario
-        """
-        pedido = self._get_pedido_seguro(usuario_id, pedido_id, roles)
-        return self._to_detail(pedido)
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
+            result = self._to_detail(pedido)
+        return result
 
     def list_pedidos(
         self,
@@ -478,25 +365,14 @@ class PedidoService:
         limit: int = 20,
         roles: list[str] | None = None,
     ) -> PedidoList:
-        """
-        Listar pedidos del usuario.
-        
-        Args:
-            usuario_id: ID del usuario
-            offset: Offset de paginación
-            limit: Límite de resultados
-            
-        Returns:
-            Lista paginada de pedidos
-        """
         roles = roles or []
-        if self._can_manage_all(roles):
-            pedidos = self._pedido_repo.get_all(offset=offset, limit=limit)
-            total = self._pedido_repo.count_all()
-        else:
-            pedidos = self._pedido_repo.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
-            total = self._pedido_repo.count_by_usuario(usuario_id)
-        
+        with PedidoUnitOfWork(self._session) as uow:
+            if self._can_manage_all(roles):
+                pedidos = uow.pedidos.get_all(offset=offset, limit=limit)
+                total = uow.pedidos.count_all()
+            else:
+                pedidos = uow.pedidos.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
+                total = uow.pedidos.count_by_usuario(usuario_id)
         return PedidoList(
             data=[self._to_public(p) for p in pedidos],
             total=total,
@@ -507,24 +383,9 @@ class PedidoService:
     # ========================================================================
 
     def get_historial(self, usuario_id: int, pedido_id: int, roles: list[str]) -> HistorialEstadoPedidoList:
-        """
-        Obtener historial de cambios de estado.
-        
-        Args:
-            usuario_id: ID del usuario
-            pedido_id: ID del pedido
-            
-        Returns:
-            Lista de cambios de estado
-            
-        Raises:
-            HTTPException: Si pedido no existe o no pertenece al usuario
-        """
-        # Verificar que el pedido pertenece al usuario
-        self._get_pedido_seguro(usuario_id, pedido_id, roles)
-        
-        historiales = self._historial_repo.get_by_pedido_id(pedido_id)
-        
+        with PedidoUnitOfWork(self._session) as uow:
+            self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
+            historiales = uow.historial.get_by_pedido_id(pedido_id)
         return HistorialEstadoPedidoList(
             data=[self._historial_to_public(h) for h in historiales],
         )
@@ -533,36 +394,24 @@ class PedidoService:
     # HELPERS
     # ========================================================================
 
-    def _get_pedido_seguro(self, usuario_id: int, pedido_id: int, roles: list[str] | None = None) -> Pedido:
-        """
-        Obtener pedido verificando que pertenece al usuario y no está eliminado.
-        
-        Raises:
-            HTTPException: Si pedido no existe o no pertenece al usuario
-        """
+    def _get_pedido_seguro(
+        self, uow: PedidoUnitOfWork, usuario_id: int, pedido_id: int, roles: list[str] | None = None
+    ) -> Pedido:
         roles = roles or []
         if self._can_manage_all(roles):
-            pedido = self._session.query(Pedido).filter(
-                Pedido.id == pedido_id,
-                Pedido.deleted_at.is_(None),
-            ).first()
+            pedido = uow.pedidos.get_by_id_no_deleted(pedido_id)
         else:
-            pedido = self._session.query(Pedido).filter(
-                Pedido.id == pedido_id,
-                Pedido.usuario_id == usuario_id,
-                Pedido.deleted_at.is_(None),
-            ).first()
-        
+            pedido = uow.pedidos.get_by_id_no_deleted(pedido_id, usuario_id=usuario_id)
+
         if not pedido:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pedido no encontrado",
             )
-        
+
         return pedido
 
     def _to_public(self, pedido: Pedido) -> PedidoPublic:
-        """Convertir Pedido a PedidoPublic."""
         return PedidoPublic(
             id=pedido.id,
             usuario_id=pedido.usuario_id,
@@ -578,13 +427,9 @@ class PedidoService:
         )
 
     def _to_detail(self, pedido: Pedido) -> PedidoDetail:
-        """Convertir Pedido a PedidoDetail."""
-        estado = self._session.query(EstadoPedido).filter(
-            EstadoPedido.codigo == pedido.estado_codigo
-        ).first()
-        
+        estado = self._estado_repo.get_by_codigo(pedido.estado_codigo)
         detalles = self._detalle_repo.get_by_pedido_id(pedido.id)
-        
+
         return PedidoDetail(
             id=pedido.id,
             usuario_id=pedido.usuario_id,
@@ -606,7 +451,6 @@ class PedidoService:
         )
 
     def _detalle_to_public(self, detalle: DetallePedido) -> DetallePedidoPublic:
-        """Convertir DetallePedido a DetallePedidoPublic."""
         return DetallePedidoPublic(
             id=detalle.id,
             producto_id=detalle.producto_id,
@@ -617,7 +461,6 @@ class PedidoService:
         )
 
     def _estado_to_public(self, estado: EstadoPedido) -> EstadoPedidoPublic:
-        """Convertir EstadoPedido a EstadoPedidoPublic."""
         return EstadoPedidoPublic(
             codigo=estado.codigo,
             nombre=estado.nombre,
@@ -625,7 +468,6 @@ class PedidoService:
         )
 
     def _historial_to_public(self, historial: HistorialEstadoPedido) -> HistorialEstadoPedidoPublic:
-        """Convertir HistorialEstadoPedido a HistorialEstadoPedidoPublic."""
         return HistorialEstadoPedidoPublic(
             id=historial.id,
             pedido_id=historial.pedido_id,

@@ -61,3 +61,15 @@ class PedidoRepository(BaseRepository[Pedido]):
             Pedido.deleted_at.is_(None),
         )
         return self.session.exec(statement).one()
+
+    def get_by_id_no_deleted(self, pedido_id: int, usuario_id: int | None = None) -> Pedido | None:
+        statement = (
+            select(Pedido)
+            .where(
+                Pedido.id == pedido_id,
+                Pedido.deleted_at.is_(None),
+            )
+        )
+        if usuario_id is not None:
+            statement = statement.where(Pedido.usuario_id == usuario_id)
+        return self.session.exec(statement).first()
