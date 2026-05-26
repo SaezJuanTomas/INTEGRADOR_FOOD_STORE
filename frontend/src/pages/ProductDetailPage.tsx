@@ -4,9 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { categoriaService, ingredienteService, productoService } from "../services/api";
 
 function formatMoney(value: number): string {
-  return new Intl.NumberFormat("es-ES", {
+  return new Intl.NumberFormat("es-AR", {
     style: "currency",
-    currency: "USD",
+    currency: "ARS",
     maximumFractionDigits: 2,
   }).format(value);
 }

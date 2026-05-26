@@ -63,12 +63,22 @@ interface EntityConfig<T extends BaseEntity, TCreate, TUpdate> {
   }) => JSX.Element;
 }
 
+function formatARS(value: number): string {
+  return new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function ProductoFormExtra({
   form,
   setForm,
+  editingItem,
 }: {
   form: EntityForm;
   setForm: Dispatch<SetStateAction<EntityForm>>;
+  editingItem: Producto | null;
 }): JSX.Element {
   const categoriasQuery = useQuery({
     queryKey: ["categorias", "select"],
@@ -79,8 +89,47 @@ function ProductoFormExtra({
   const usaStockManual = Boolean(form.usa_stock_manual);
   const usaCostoCompraManual = Boolean(form.usa_costo_compra_manual);
 
+  const ingredientesQuery = useQuery({
+    queryKey: ["ingredientes", "costos"],
+    queryFn: () => ingredienteService.getAll(0, 100, false),
+  });
+  const ingredientesDisponibles = ingredientesQuery.data?.data ?? [];
+
+  const precioSugerido = useMemo(() => {
+    if (editingItem?.precio_sugerido != null) {
+      return editingItem.precio_sugerido;
+    }
+    let costo = 0;
+    if (usaCostoCompraManual && typeof form.costo_compra_manual === "number") {
+      costo = form.costo_compra_manual;
+    } else if (!usaStockManual) {
+      const ingredientesForm = (form.ingredientes as ProductoIngrediente[] | undefined) ?? [];
+      const costosMap = new Map(ingredientesDisponibles.map((i) => [i.id, Number(i.costo_unitario)]));
+      for (const item of ingredientesForm) {
+        costo += (costosMap.get(item.ingrediente_id) ?? 0) * item.cantidad;
+      }
+    }
+    return costo > 0 ? costo * 1.5 : null;
+  }, [editingItem, form, ingredientesDisponibles, usaCostoCompraManual, usaStockManual]);
+
   return (
     <>
+      <label className="text-sm font-medium text-orange-900">Precio base</label>
+      <div className="flex gap-2">
+        <input
+          className="flex-1 rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
+          type="number"
+          min={0}
+          value={form.numberValue}
+          onChange={(event) =>
+            setForm((previous) => ({ ...previous, numberValue: Number(event.target.value) }))
+          }
+        />
+        <div className="flex items-center rounded bg-orange-50 px-3 py-2 text-sm text-orange-700 whitespace-nowrap">
+          Sugerido: {precioSugerido !== null ? formatARS(precioSugerido) : "—"}
+        </div>
+      </div>
+
       <label className="flex items-center gap-2 rounded border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
         <input
           type="checkbox"
@@ -1016,7 +1065,8 @@ const productoConfig: EntityConfig<Producto, ProductoCreate, ProductoUpdate> = {
   secondFilterType: "boolean",
   secondFilterValue: (item) => (item.disponible ? "si" : "no"),
   numberValue: (item) => Number(item.precio_base),
-  numberLabel: "Precio mínimo",
+  numberLabel: "Precio base",
+  showNumberInForm: false,
   showNumberFilter: false,
   service: productoService,
   toForm: (item) => ({
@@ -1054,7 +1104,9 @@ const productoConfig: EntityConfig<Producto, ProductoCreate, ProductoUpdate> = {
     categoria_id: (form.categoria_id as number | null) ?? null,
     ingredientes: (form.ingredientes as ProductoIngrediente[] | undefined) ?? [],
   }),
-  renderFormExtra: ({ form, setForm }) => <ProductoFormExtra form={form} setForm={setForm} />,
+  renderFormExtra: ({ form, setForm, editingItem }) => (
+    <ProductoFormExtra form={form} setForm={setForm} editingItem={editingItem as Producto | null} />
+  ),
 };
 
 const ingredienteConfig: EntityConfig<Ingrediente, IngredienteCreate, IngredienteUpdate> = {

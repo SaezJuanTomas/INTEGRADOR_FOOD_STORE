@@ -78,8 +78,8 @@ class ProductoService:
         elif producto.stock_manual is not None:
             stock_disponible = producto.stock_manual
 
-        precio_sugerido = costo_total * Decimal("1.5")
-        margen_estimado = precio_sugerido - costo_total
+        precio_sugerido = (costo_total * Decimal("1.5")).quantize(Decimal("0.0001"))
+        margen_estimado = (precio_sugerido - costo_total).quantize(Decimal("0.0001"))
         return categoria_id, costo_total, precio_sugerido, margen_estimado, categoria_nombre, stock_disponible
 
     def _to_public(self, producto: Producto) -> ProductoPublic:

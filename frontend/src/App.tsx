@@ -31,9 +31,12 @@ interface DashboardLayoutProps {
 
 function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element {
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 text-slate-800">
+    <div
+      className="flex min-h-screen flex-col bg-gradient-to-br from-orange-50 via-amber-50 to-stone-100 text-slate-800"
+      style={{ minHeight: "100dvh" }}
+    >
       <NavBar />
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-3 sm:p-4">
         <div className="mx-auto max-w-6xl">{children}</div>
       </div>
     </div>
