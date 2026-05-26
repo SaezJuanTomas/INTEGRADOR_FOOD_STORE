@@ -4,11 +4,7 @@ Aplicación full-stack para la gestión de productos, categorías e ingredientes
 
 # INTEGRADORES:
 
-Tomás Sáez
-Gabriel Kogan 
-Lucas Norton 
-Lorenzo Espetxe
-Mateo De Martino 
+Tomás Sáez, Gabriel Kogan, Lucas Norton, Lorenzo Espetxe, Mateo De Martino 
 Gonzalo Sevilla
 
 ## 🎯 Descripción del Proyecto
