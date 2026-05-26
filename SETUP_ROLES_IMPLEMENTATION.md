@@ -1,7 +1,5 @@
 # 🎯 Implementación de Control de Acceso por Roles
 
-## Resumen de Cambios
-
 ### Frontend - Componentes Nuevos
 
 1. **ProtectedRoute.tsx** - Validación de autenticación y roles
@@ -192,20 +190,3 @@ frontend/src/
 1. ProtectedRoute valida token (redirige a /login si no existe)
 2. Si requiredRoles definido, valida que usuario tenga al menos un rol
 3. Si roles no coinciden, redirige a /access-denied
-
-## Notas Importantes
-
-- ✅ Toda validación de roles en backend está implementada via `role_checker`
-- ✅ Frontend valida ADEMÁS por UX (no duplica seguridad)
-- ✅ CartContext es standalone, no depende de backend aún
-- ✅ MisPedidosPage hace fetch a GET /pedidos (requiere token)
-- ⏳ Checkout (crear pedidos) aún por implementar
-
-## Próximos Pasos (Opcionales)
-
-1. Implementar cliente perfil (/perfil)
-2. Implementar detalle de pedido (/pedido/:id)
-3. Implementar checkout (carrito → pedido en backend)
-4. Crear páginas placeholder para Usuarios y Gastos
-5. Integrar imágenes de productos en carrito
-
