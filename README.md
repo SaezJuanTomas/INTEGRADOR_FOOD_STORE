@@ -2,6 +2,11 @@
 
 Aplicación full-stack para la gestión de productos, categorías e ingredientes en una tienda de alimentos. Combina un backend REST API con FastAPI y un frontend moderno en React + TypeScript.
 
+# INTEGRADORES:
+
+Tomás Sáez, Gabriel Kogan, Lucas Norton, Lorenzo Espetxe, Mateo De Martino 
+Gonzalo Sevilla
+
 ## 🎯 Descripción del Proyecto
 
 INTEGRADOR FOOD STORE es un sistema completo de gestión de catálogo de productos que permite:
