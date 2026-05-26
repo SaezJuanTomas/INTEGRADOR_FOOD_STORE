@@ -28,6 +28,8 @@ const stateColors: Record<string, string> = {
   CANCELADO: "bg-red-100 text-red-800",
 };
 
+const cancellableStates = ["PENDIENTE", "CONFIRMADO"];
+
 export function OperacionPedidoDetailPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const pedidoId = Number(id);
@@ -43,6 +45,15 @@ export function OperacionPedidoDetailPage(): JSX.Element {
     queryKey: ["pedido-historial", pedidoId],
     queryFn: () => getHistorialPedido(pedidoId),
     enabled: !Number.isNaN(pedidoId),
+  });
+
+  const cancelarMutation = useMutation({
+    mutationFn: () => cambiarEstadoPedido(pedidoId, "CANCELADO", "Cancelado por administrador"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pedido", pedidoId] });
+      queryClient.invalidateQueries({ queryKey: ["pedido-historial", pedidoId] });
+      queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+    },
   });
 
   const avanzarMutation = useMutation({
@@ -133,16 +144,33 @@ export function OperacionPedidoDetailPage(): JSX.Element {
       {!isTerminal && (
         <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold text-orange-900">Acciones</h2>
-          <button
-            type="button"
-            onClick={() => avanzarMutation.mutate(nextEstado)}
-            disabled={avanzarMutation.isPending}
-            className="rounded bg-orange-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 disabled:opacity-50"
-          >
-            {avanzarMutation.isPending
-              ? "Procesando..."
-              : `Avanzar a ${stateLabels[nextEstado] ?? nextEstado}`}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => avanzarMutation.mutate(nextEstado)}
+              disabled={avanzarMutation.isPending}
+              className="rounded bg-orange-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 disabled:opacity-50"
+            >
+              {avanzarMutation.isPending
+                ? "Procesando..."
+                : `Avanzar a ${stateLabels[nextEstado] ?? nextEstado}`}
+            </button>
+
+            {cancellableStates.includes(pedido.estado_codigo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm("¿Cancelar este pedido? Se restaurará el stock si corresponde.")) {
+                    cancelarMutation.mutate();
+                  }
+                }}
+                disabled={cancelarMutation.isPending}
+                className="rounded bg-red-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
+              >
+                {cancelarMutation.isPending ? "Cancelando..." : "Cancelar pedido"}
+              </button>
+            )}
+          </div>
         </div>
       )}
 

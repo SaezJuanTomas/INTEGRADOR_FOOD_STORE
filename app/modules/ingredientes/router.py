@@ -22,11 +22,12 @@ def get_ingrediente_service(session: Session = Depends(get_session)) -> Ingredie
 
 
 @router.post("", response_model=IngredientePublic, status_code=status.HTTP_201_CREATED)
-
-
-
-
-
+def create_ingrediente(
+    data: IngredienteCreate,
+    _: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_STOCK])),
+    svc: IngredienteService = Depends(get_ingrediente_service),
+) -> IngredientePublic:
+    return svc.create(data)
 
 
 @router.get("", response_model=IngredienteList)

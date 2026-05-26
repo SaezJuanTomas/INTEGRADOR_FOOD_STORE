@@ -49,6 +49,7 @@ interface EntityConfig<T extends BaseEntity, TCreate, TUpdate> {
   numberValue: (item: T) => number;
   numberLabel: string;
   showNumberInForm?: boolean;
+  showNumberFilter?: boolean;
   service: CrudService<T, TCreate, TUpdate>;
   toForm: (item: T | null) => EntityForm;
   toCreate: (form: EntityForm) => TCreate;
@@ -76,9 +77,41 @@ function ProductoFormExtra({
 
   const activeCategorias = categoriasQuery.data?.data ?? [];
   const usaStockManual = Boolean(form.usa_stock_manual);
+  const usaCostoCompraManual = Boolean(form.usa_costo_compra_manual);
 
   return (
     <>
+      <label className="flex items-center gap-2 rounded border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+        <input
+          type="checkbox"
+          checked={usaCostoCompraManual}
+          onChange={(event) =>
+            setForm((previous) => ({
+              ...previous,
+              usa_costo_compra_manual: event.target.checked,
+              costo_compra_manual: event.target.checked ? previous.costo_compra_manual : null,
+            }))
+          }
+        />
+        <span>Usa costo de compra manual</span>
+      </label>
+      {usaCostoCompraManual && (
+        <input
+          type="number"
+          min={0}
+          step="0.0001"
+          className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
+          value={typeof form.costo_compra_manual === "number" ? form.costo_compra_manual : ""}
+          onChange={(event) =>
+            setForm((previous) => ({
+              ...previous,
+              costo_compra_manual: event.target.value === "" ? null : Number(event.target.value),
+            }))
+          }
+          placeholder="Ej: 3.2500"
+        />
+      )}
+
       <label className="text-sm font-medium text-orange-900">Categoría (opcional)</label>
       <select
         className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
@@ -97,6 +130,7 @@ function ProductoFormExtra({
           </option>
         ))}
       </select>
+
       <label className="flex items-center gap-2 rounded border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
         <input
           type="checkbox"
@@ -111,37 +145,23 @@ function ProductoFormExtra({
         />
         <span>Usa stock manual</span>
       </label>
-      <label className="text-sm font-medium text-orange-900">Stock manual (si aplica)</label>
-      <input
-        type="number"
-        min={0}
-        step="1"
-        className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
-        value={typeof form.stock_manual === "number" ? form.stock_manual : ""}
-        disabled={!usaStockManual}
-        onChange={(event) =>
-          setForm((previous) => ({
-            ...previous,
-            stock_manual: event.target.value === "" ? null : Number(event.target.value),
-          }))
-        }
-        placeholder="Ej: 60"
-      />
-      <label className="text-sm font-medium text-orange-900">Costo de compra manual (opcional)</label>
-      <input
-        type="number"
-        min={0}
-        step="0.0001"
-        className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
-        value={typeof form.costo_compra_manual === "number" ? form.costo_compra_manual : ""}
-        onChange={(event) =>
-          setForm((previous) => ({
-            ...previous,
-            costo_compra_manual: event.target.value === "" ? null : Number(event.target.value),
-          }))
-        }
-        placeholder="Ej: 3.2500"
-      />
+      {usaStockManual && (
+        <input
+          type="number"
+          min={0}
+          step="1"
+          className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
+          value={typeof form.stock_manual === "number" ? form.stock_manual : ""}
+          onChange={(event) =>
+            setForm((previous) => ({
+              ...previous,
+              stock_manual: event.target.value === "" ? null : Number(event.target.value),
+            }))
+          }
+          placeholder="Ej: 60"
+        />
+      )}
+
       <ProductoIngredientsEditor form={form} setForm={setForm} />
     </>
   );
@@ -769,18 +789,20 @@ function EntityPage<T extends BaseEntity, TCreate, TUpdate>({
           />
         )}
 
-        <input
-          className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
-          type="number"
-          min={0}
-          value={minNumber}
-          onChange={(event) => {
-            const parsed = Number(event.target.value);
-            setMinNumber(Number.isNaN(parsed) ? 0 : parsed);
-            setCurrentPage(1);
-          }}
-          placeholder={config.numberLabel}
-        />
+        {config.showNumberFilter !== false && (
+          <input
+            className="rounded border border-orange-200 px-3 py-2 focus:border-orange-400 focus:outline-none"
+            type="number"
+            min={0}
+            value={minNumber}
+            onChange={(event) => {
+              const parsed = Number(event.target.value);
+              setMinNumber(Number.isNaN(parsed) ? 0 : parsed);
+              setCurrentPage(1);
+            }}
+            placeholder={config.numberLabel}
+          />
+        )}
 
         <button
           type="button"
@@ -935,6 +957,7 @@ const categoriaConfig: EntityConfig<Categoria, CategoriaCreate, CategoriaUpdate>
   numberValue: (item) => item.orden_display,
   numberLabel: "Orden mínimo",
   showNumberInForm: false,
+  showNumberFilter: false,
   service: categoriaService,
   toForm: (item) => ({
     nombre: item?.nombre ?? "",
@@ -994,6 +1017,7 @@ const productoConfig: EntityConfig<Producto, ProductoCreate, ProductoUpdate> = {
   secondFilterValue: (item) => (item.disponible ? "si" : "no"),
   numberValue: (item) => Number(item.precio_base),
   numberLabel: "Precio mínimo",
+  showNumberFilter: false,
   service: productoService,
   toForm: (item) => ({
     nombre: item?.nombre ?? "",
@@ -1041,6 +1065,8 @@ const ingredienteConfig: EntityConfig<Ingrediente, IngredienteCreate, Ingredient
   secondFilterValue: (item) => (item.es_alergeno ? "si" : "no"),
   numberValue: (item) => 0,
   numberLabel: "Filtro",
+  showNumberInForm: false,
+  showNumberFilter: false,
   service: ingredienteService,
   toForm: (item) => ({
     nombre: item?.nombre ?? "",

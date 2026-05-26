@@ -258,6 +258,33 @@ export const categoriaService = buildCrudService<Categoria, CategoriaCreate, Cat
 export const productoService = buildCrudService<Producto, ProductoCreate, ProductoUpdate>("/productos");
 export const ingredienteService = buildCrudService<Ingrediente, IngredienteCreate, IngredienteUpdate>("/ingredientes");
 
+export interface RegisterPayload {
+  nombre: string;
+  apellido: string;
+  email: string;
+  celular?: string;
+  password: string;
+}
+
+export function registerUser(payload: RegisterPayload): Promise<UsuarioPublic> {
+  return request<UsuarioPublic>("/auth/register", {
+    method: "POST",
+    data: payload,
+  });
+}
+
+export function assignRol(usuarioId: number, rolCodigo: string): Promise<UsuarioDetail> {
+  return request<UsuarioDetail>(`/usuarios/${usuarioId}/roles/${rolCodigo}`, {
+    method: "POST",
+  });
+}
+
+export function removeRol(usuarioId: number, rolCodigo: string): Promise<UsuarioDetail> {
+  return request<UsuarioDetail>(`/usuarios/${usuarioId}/roles/${rolCodigo}`, {
+    method: "DELETE",
+  });
+}
+
 export function listUsuarios(
   offset = 0,
   limit = 50,

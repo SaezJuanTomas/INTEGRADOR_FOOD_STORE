@@ -61,6 +61,7 @@ class PedidoService:
 
     TRANSICIONES_STOCK = {
         (STATE_CONFIRMADO, STATE_PENDIENTE): "restore",
+        (STATE_CONFIRMADO, STATE_CANCELADO): "restore",
         (STATE_CANCELADO, STATE_PENDIENTE): "reopen",
     }
 
@@ -84,11 +85,11 @@ class PedidoService:
         normalized = {normalize_role(role) for role in roles}
         return ROLE_ADMIN in normalized or ROLE_PEDIDOS in normalized
 
-    async def _broadcast_event(self, estado_codigo: str, pedido: Pedido) -> None:
+    async def _broadcast_event(self, estado_codigo: str, pedido_public: PedidoPublic) -> None:
         event = self.EVENTOS_WS.get(estado_codigo)
         if event is None:
             return
-        await manager.broadcast(event, self._to_public(pedido).model_dump())
+        await manager.broadcast(event, pedido_public.model_dump())
 
     # ========================================================================
     # CREAR PEDIDO
@@ -180,14 +181,14 @@ class PedidoService:
                 uow.detalles.add(detalle)
 
             detalles = uow.detalles.get_by_pedido_id(pedido.id)
-
-        return ConfirmarPedidoResponse(
-            id=pedido.id,
-            estado_codigo=pedido.estado_codigo,
-            total=pedido.total,
-            detalles=[self._detalle_to_public(d) for d in detalles],
-            mensaje="Pedido creado. Pendiente de confirmar por el administrador.",
-        )
+            response = ConfirmarPedidoResponse(
+                id=pedido.id,
+                estado_codigo=pedido.estado_codigo,
+                total=pedido.total,
+                detalles=[self._detalle_to_public(d) for d in detalles],
+                mensaje="Pedido creado. Pendiente de confirmar por el administrador.",
+            )
+        return response
 
     # ========================================================================
     # CONFIRMAR PEDIDO
@@ -230,15 +231,17 @@ class PedidoService:
             )
             uow.historial.add(historial)
 
-        await self._broadcast_event(pedido.estado_codigo, pedido)
+            response = ConfirmarPedidoResponse(
+                id=pedido.id,
+                estado_codigo=pedido.estado_codigo,
+                total=pedido.total,
+                detalles=[self._detalle_to_public(d) for d in detalles],
+                mensaje="Pedido confirmado exitosamente. Stock descontado.",
+            )
+            bc_public = self._to_public(pedido)
 
-        return ConfirmarPedidoResponse(
-            id=pedido.id,
-            estado_codigo=pedido.estado_codigo,
-            total=pedido.total,
-            detalles=[self._detalle_to_public(d) for d in detalles],
-            mensaje="Pedido confirmado exitosamente. Stock descontado.",
-        )
+        await self._broadcast_event(response.estado_codigo, bc_public)
+        return response
 
     # ========================================================================
     # CANCELAR PEDIDO
@@ -283,8 +286,9 @@ class PedidoService:
             uow.historial.add(historial)
 
             result = self._to_detail(pedido)
+            bc_public = self._to_public(pedido)
 
-        await self._broadcast_event(pedido.estado_codigo, pedido)
+        await self._broadcast_event(result.estado_codigo, bc_public)
         return result
 
     # ========================================================================
@@ -344,8 +348,9 @@ class PedidoService:
             uow.historial.add(historial)
 
             result = self._to_detail(pedido)
+            bc_public = self._to_public(pedido)
 
-        await self._broadcast_event(pedido.estado_codigo, pedido)
+        await self._broadcast_event(result.estado_codigo, bc_public)
         return result
 
     # ========================================================================
@@ -373,10 +378,8 @@ class PedidoService:
             else:
                 pedidos = uow.pedidos.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
                 total = uow.pedidos.count_by_usuario(usuario_id)
-        return PedidoList(
-            data=[self._to_public(p) for p in pedidos],
-            total=total,
-        )
+            data = [self._to_public(p) for p in pedidos]
+        return PedidoList(data=data, total=total)
 
     # ========================================================================
     # HISTORIAL
@@ -386,9 +389,8 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
             historiales = uow.historial.get_by_pedido_id(pedido_id)
-        return HistorialEstadoPedidoList(
-            data=[self._historial_to_public(h) for h in historiales],
-        )
+            data = [self._historial_to_public(h) for h in historiales]
+        return HistorialEstadoPedidoList(data=data)
 
     # ========================================================================
     # HELPERS

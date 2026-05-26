@@ -1,6 +1,6 @@
 import { useCart } from "../context/CartContext";
 import { useAuth } from "../context/AuthContext";
-import { confirmPedido, createPedido, listDireccionesUsuario } from "../services/api";
+import { createPedido, listDireccionesUsuario } from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 
@@ -34,7 +34,7 @@ export function CarritoPage(): JSX.Element {
         return;
       }
 
-      const pedido = await createPedido({
+      await createPedido({
         direccion_entrega_id: direccion.id,
         detalles: items.map((item) => ({
           producto_id: item.producto_id,
@@ -43,9 +43,8 @@ export function CarritoPage(): JSX.Element {
         notas: "Checkout rápido sin pago (demo)",
       });
 
-      await confirmPedido(pedido.id);
       limpiarCarrito();
-      alert("Venta realizada correctamente. El pedido fue confirmado.");
+      alert("Pedido creado. Pendiente de confirmar por el administrador.");
       navigate("/mis-pedidos");
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo realizar el checkout";
