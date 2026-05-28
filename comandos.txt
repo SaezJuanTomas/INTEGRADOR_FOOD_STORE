@@ -45,8 +45,177 @@ docker compose up -d
 .\.venv\Scripts\Activate.ps1
 
 # Iniciar servidor (usar SOLO este comando)
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
-```
+1. Resumen general del proyecto
+
+Explicar:
+
+qué hace la aplicación
+arquitectura general
+tecnologías usadas
+cómo se conectan frontend y backend
+estructura de carpetas importante
+
+NO listar archivos innecesarios.
+
+2. Backend (Parte 1)
+
+Explicar el backend dividido por módulos.
+
+Para cada módulo importante explicar:
+
+responsabilidad
+endpoints principales
+flujo de datos
+entidades/modelos relacionados
+lógica importante
+
+NO repetir CRUDs idénticos innecesariamente.
+
+Si hay muchos controladores similares:
+
+elegir el más completo
+explicar ese
+mencionar que el resto sigue el mismo patrón
+3. Pedidos (MUY IMPORTANTE)
+
+Esta es la sección más importante.
+
+Explicar TODO el flujo de pedidos:
+
+creación de pedidos
+estados
+actualización
+lógica de operaciones
+relaciones con productos
+relaciones con usuarios
+cálculos importantes
+validaciones
+stock si existe
+flujo completo desde frontend → backend → base de datos
+
+Quiero entender el flujo real del sistema.
+
+Explicar paso a paso.
+
+4. Frontend (Parte 2)
+
+Explicar:
+
+estructura general
+páginas importantes
+rutas
+componentes principales
+manejo de estado
+llamadas API
+autenticación
+flujo de navegación
+
+NO explicar componentes repetidos o triviales.
+
+Elegir los más importantes y reutilizados.
+
+5. Explicación de funciones importantes
+
+Buscar funciones relevantes del proyecto y explicar:
+
+qué hacen
+parámetros
+retorno
+por qué son importantes
+cómo participan en el flujo general
+
+NO listar todas las funciones del proyecto.
+
+Elegir:
+
+las más complejas
+las más reutilizadas
+las más representativas
+6. Patrones y arquitectura
+
+Explicar si existen:
+
+services
+repositories
+DTOs
+hooks
+context
+middleware
+guards
+interceptors
+unit of work
+consultas complejas
+manejo de estado
+cache
+autenticación JWT
+relaciones entre capas
+
+Explicar cómo funcionan EN ESTE PROYECTO.
+
+7. Base de datos
+
+Explicar:
+
+entidades principales
+relaciones
+tablas importantes
+flujo de persistencia
+relaciones críticas del sistema
+
+Especialmente:
+
+pedidos
+productos
+usuarios
+stock
+operaciones
+8. Flujo completo del sistema
+
+Hacer ejemplos REALES del flujo:
+
+Ejemplo:
+
+Usuario crea pedido →
+Frontend arma request →
+API recibe →
+Service valida →
+Base de datos guarda →
+Frontend actualiza estado
+
+Quiero varios ejemplos importantes.
+
+Reglas IMPORTANTES
+NO repetir explicaciones iguales
+NO explicar archivos irrelevantes
+NO listar código innecesariamente
+resumir inteligentemente
+priorizar claridad
+explicar como si fuera para estudiar una defensa/presentación
+usar títulos claros
+usar markdown prolijo
+usar ejemplos concretos
+si hay patrones repetidos, explicar una sola vez
+identificar qué parte es la más importante del sistema
+Análisis profundo
+
+Antes de escribir:
+
+recorrer estructura completa
+identificar módulos importantes
+detectar lógica central
+detectar flujo principal del negocio
+detectar archivos clave
+detectar patrones repetidos
+recién después generar el documento final
+Extra importante
+
+Si encontrás código duplicado o patrones repetidos:
+
+NO repetir explicación
+agrupar comportamiento
+explicar el patrón general
+
+Quiero una documentación útil, resumida e inteligente.```
 
 No ejecutes `python main.py` y `uvicorn` juntos: con `uvicorn` alcanza.
 
