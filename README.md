@@ -2,10 +2,14 @@
 
 Aplicación full-stack para la gestión de productos, categorías e ingredientes en una tienda de alimentos. Combina un backend REST API con FastAPI y un frontend moderno en React + TypeScript.
 
-# INTEGRADORES:
+# INTEGRANTES:
 
 Tomás Sáez, Gabriel Kogan, Lucas Norton, Lorenzo Espetxe, Mateo De Martino 
 Gonzalo Sevilla
+
+# Video:
+
+https://drive.google.com/file/d/1O7lPbRHDViPO9TCsgG8shp_2_UdOtTl4/view?usp=sharing
 
 ## 🎯 Descripción del Proyecto
 
