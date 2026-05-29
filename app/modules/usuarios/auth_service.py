@@ -10,8 +10,9 @@ from sqlmodel import Session
 
 from app.core.rbac import ROLE_CLIENT, normalize_role
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
-from app.models import Usuario, Rol, UsuarioRol
+from app.models import Usuario, UsuarioRol
 from app.modules.usuarios.repository import UsuarioRepository
+from app.modules.usuarios.unit_of_work import UsuarioUnitOfWork
 from app.modules.usuarios.schemas import (
     UsuarioCreate,
     UsuarioPublic,
@@ -44,38 +45,35 @@ class AuthService:
         Raises:
             HTTPException: Si email ya existe
         """
-        # Verificar email único
-        existing = self._usuario_repo.get_by_email(data.email)
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email ya registrado",
-            )
-        
-        # Crear usuario
-        usuario = Usuario(
-            nombre=data.nombre,
-            apellido=data.apellido,
-            email=data.email,
-            celular=data.celular,
-            password_hash=hash_password(data.password),
-            activo=True,
-        )
-
-        usuario = self._usuario_repo.add(usuario)
-        self._session.flush()
-
-        rol_cliente = self._session.get(Rol, ROLE_CLIENT)
-        if rol_cliente:
-            self._session.add(
-                UsuarioRol(
-                    usuario_id=usuario.id,
-                    rol_codigo=rol_cliente.codigo,
+        with UsuarioUnitOfWork(self._session) as uow:
+            existing = uow.usuarios.get_by_email(data.email)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email ya registrado",
                 )
+
+            usuario = Usuario(
+                nombre=data.nombre,
+                apellido=data.apellido,
+                email=data.email,
+                celular=data.celular,
+                password_hash=hash_password(data.password),
+                activo=True,
             )
 
-        self._session.commit()
-        
+            usuario = uow.usuarios.add(usuario)
+            uow._session.flush()
+
+            rol_cliente = uow.roles.get_by_codigo(ROLE_CLIENT)
+            if rol_cliente:
+                uow._session.add(
+                    UsuarioRol(
+                        usuario_id=usuario.id,
+                        rol_codigo=rol_cliente.codigo,
+                    )
+                )
+
         return self._to_public(usuario)
 
     def login(self, data: LoginRequest) -> TokenResponse:
