@@ -24,6 +24,7 @@ def get_payment_service(session: Session = Depends(get_session)) -> PaymentServi
     return PaymentService(session)
 
 
+@router.post("/crear", response_model=PagoCrearResponse)
 @router.post("/create-preference", response_model=PagoCrearResponse)
 def create_preference(
     data: CrearPagoRequest,

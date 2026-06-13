@@ -10,6 +10,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from sqlalchemy.pool import StaticPool
 
 os.environ.setdefault("DEBUG", "True")
+os.environ["SKIP_RATE_LIMIT"] = "1"
 
 
 @asynccontextmanager

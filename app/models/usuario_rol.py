@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING
+from datetime import datetime
+from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -17,6 +18,11 @@ class UsuarioRol(SQLModel, table=True):
 
     usuario_id: int = Field(foreign_key="usuarios.id", primary_key=True, nullable=False)
     rol_codigo: str = Field(foreign_key="roles.codigo", primary_key=True, max_length=50, nullable=False)
+    asignado_por_id: Optional[int] = Field(default=None, foreign_key="usuarios.id")
+    expires_at: Optional[datetime] = Field(default=None)
 
-    usuario: "Usuario" = Relationship(back_populates="usuarios_roles")
+    usuario: "Usuario" = Relationship(
+        back_populates="usuarios_roles",
+        sa_relationship_kwargs={"foreign_keys": "UsuarioRol.usuario_id"},
+    )
     rol: "Rol" = Relationship(back_populates="usuarios_roles")

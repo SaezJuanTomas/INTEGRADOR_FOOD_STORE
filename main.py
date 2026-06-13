@@ -13,6 +13,8 @@ from app.modules.ingredientes.router import router as ingredientes_router
 from app.modules.productos.router import router as productos_router
 from app.modules.pedidos.router import router as pedidos_router
 from app.modules.payments.router import router as pagos_router
+from app.modules.estadisticas.router import router as estadisticas_router
+from app.core.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -74,8 +76,8 @@ def _initialize_roles_and_states():
                 session.add(estado)
 
         formas_pago = [
+            ("MERCADOPAGO", "MercadoPago", "Pago con MercadoPago"),
             ("EFECTIVO", "Efectivo", "Pago en efectivo"),
-            ("TARJETA", "Tarjeta", "Pago con tarjeta"),
             ("TRANSFERENCIA", "Transferencia", "Pago por transferencia"),
         ]
         for codigo, nombre, descripcion in formas_pago:
@@ -304,6 +306,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RateLimitMiddleware)
+
 # Routers de autenticación y usuarios
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 app.include_router(usuarios_router, prefix="/usuarios", tags=["usuarios"])
@@ -318,6 +322,9 @@ app.include_router(pedidos_router, prefix="/pedidos", tags=["pedidos"])
 
 # Router de pagos (MercadoPago)
 app.include_router(pagos_router)
+
+# Router de estadísticas
+app.include_router(estadisticas_router, prefix="/api/v1/estadisticas", tags=["estadisticas"])
 
 
 @app.get("/", tags=["health"])

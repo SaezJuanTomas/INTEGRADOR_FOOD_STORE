@@ -24,6 +24,8 @@ class Producto(BaseModel, table=True):
     imagenes_url: Optional[str] = Field(default=None, nullable=True)
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0, nullable=True)
     disponible: bool = Field(default=True, nullable=False)
+    stock_cantidad: Optional[int] = Field(default=None, ge=0, nullable=True)
+    unidad_venta_id: Optional[int] = Field(default=None, foreign_key="unidades_medida.id")
     usa_stock_manual: bool = Field(default=False, nullable=False)
     stock_manual: Optional[int] = Field(default=None, ge=0, nullable=True)
     costo_compra_manual: Optional[Decimal] = Field(

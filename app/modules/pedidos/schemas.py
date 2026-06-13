@@ -37,6 +37,7 @@ class DetallePedidoPublic(SQLModel):
     nombre_snapshot: str
     precio_snapshot: Decimal
     subtotal_snapshot: Decimal
+    personalizacion: Optional[str] = None
 
 
 class DetallePedidoDetail(DetallePedidoPublic):

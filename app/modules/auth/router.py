@@ -11,6 +11,7 @@ from app.core.database import get_session
 from app.modules.usuarios.auth_service import AuthService
 from app.modules.usuarios.schemas import (
     LoginRequest,
+    RefreshRequest,
     TokenResponse,
     UsuarioCreate,
     UsuarioPublic,
@@ -81,6 +82,17 @@ def login(
     )
 
     return token_response
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    data: RefreshRequest,
+    svc: AuthService = Depends(get_auth_service),
+) -> TokenResponse:
+    """
+    Renovar access token usando refresh token.
+    """
+    return svc.refresh(data.refresh_token)
 
 
 @router.get("/me", response_model=CurrentUser)

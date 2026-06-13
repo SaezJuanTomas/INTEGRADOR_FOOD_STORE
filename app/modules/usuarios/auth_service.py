@@ -9,7 +9,11 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from app.core.rbac import ROLE_CLIENT, normalize_role
-from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
+from app.core.security import (
+    hash_password, verify_password,
+    create_access_token, create_refresh_token,
+    decode_access_token, decode_refresh_token,
+)
 from app.models import Usuario, UsuarioRol
 from app.modules.usuarios.repository import UsuarioRepository
 from app.modules.usuarios.unit_of_work import UsuarioUnitOfWork
@@ -124,11 +128,52 @@ class AuthService:
         
         token = create_access_token(
             token_data,
-            expires_delta=timedelta(hours=24),
+            expires_delta=timedelta(minutes=30),
         )
+        refresh = create_refresh_token({"sub": str(usuario.id)})
         
         return TokenResponse(
             access_token=token,
+            refresh_token=refresh,
+            token_type="Bearer",
+            usuario=self._to_public(usuario),
+            roles=roles,
+        )
+
+    def refresh(self, refresh_token: str) -> TokenResponse:
+        payload = decode_refresh_token(refresh_token)
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token inválido o expirado",
+            )
+
+        usuario_id = int(payload.get("sub", -1))
+        if usuario_id < 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token inválido",
+            )
+
+        usuario = self._usuario_repo.get_by_id(usuario_id)
+        if not usuario or not usuario.activo or usuario.deleted_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Usuario no válido",
+            )
+
+        roles = [normalize_role(ur.rol.codigo) for ur in usuario.usuarios_roles]
+        token_data = {
+            "sub": str(usuario.id),
+            "email": usuario.email,
+            "roles": roles,
+        }
+        token = create_access_token(token_data, expires_delta=timedelta(minutes=30))
+        refresh = create_refresh_token({"sub": str(usuario.id)})
+
+        return TokenResponse(
+            access_token=token,
+            refresh_token=refresh,
             token_type="Bearer",
             usuario=self._to_public(usuario),
             roles=roles,

@@ -59,6 +59,7 @@ interface LoginPayload {
 
 interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
   usuario: {
     id: number;
@@ -69,6 +70,13 @@ interface LoginResponse {
     activo: boolean;
   };
   roles?: string[];
+}
+
+export async function refreshTokenRequest(refresh_token: string): Promise<LoginResponse> {
+  return request<LoginResponse>("/auth/refresh", {
+    method: "POST",
+    data: { refresh_token },
+  });
 }
 
 export interface UsuarioPublic {

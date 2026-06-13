@@ -26,7 +26,11 @@ class Usuario(BaseModel, table=True):
     activo: bool = Field(default=True, nullable=False)
 
     # Relaciones
-    usuarios_roles: List["UsuarioRol"] = Relationship(back_populates="usuario", cascade_delete=True)
+    usuarios_roles: List["UsuarioRol"] = Relationship(
+        back_populates="usuario",
+        cascade_delete=True,
+        sa_relationship_kwargs={"foreign_keys": "UsuarioRol.usuario_id"},
+    )
     direcciones: List["DireccionEntrega"] = Relationship(back_populates="usuario", cascade_delete=True)
     pedidos: List["Pedido"] = Relationship(back_populates="usuario", cascade_delete=True)
     historiales: List["HistorialEstadoPedido"] = Relationship(back_populates="usuario")

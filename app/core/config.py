@@ -12,7 +12,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change_this_secret_key_for_production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     COOKIE_SECURE: bool = False
+    rate_limit_default_burst: int = 10
+    rate_limit_default_per_minute: int = 60
+    rate_limit_auth_burst: int = 5
+    rate_limit_auth_per_minute: int = 5
     COOKIE_SAMESITE: str = "lax"
     COOKIE_NAME: str = "access_token"
     # MercadoPago (nuevos nombres)

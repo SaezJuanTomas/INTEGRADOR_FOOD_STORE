@@ -123,9 +123,14 @@ class LoginRequest(SQLModel):
 
 class TokenResponse(SQLModel):
     access_token: str
+    refresh_token: str
     token_type: str
     usuario: UsuarioPublic
     roles: List[str] = Field(default_factory=list)  # códigos de rol
+
+
+class RefreshRequest(SQLModel):
+    refresh_token: str = Field(min_length=10)
 
 
 class CurrentUser(UsuarioPublic):

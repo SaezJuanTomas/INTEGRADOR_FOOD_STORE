@@ -31,6 +31,7 @@ class DetallePedido(BaseModel, table=True):
     nombre_snapshot: str = Field(max_length=150, nullable=False)
     precio_snapshot: Decimal = Field(ge=0, max_digits=10, decimal_places=2, nullable=False)
     subtotal_snapshot: Decimal = Field(ge=0, max_digits=10, decimal_places=2, nullable=False)
+    personalizacion: Optional[str] = Field(default=None, max_length=500)
 
     # Relaciones
     pedido: "Pedido" = Relationship(back_populates="detalles")

@@ -473,6 +473,7 @@ class PedidoService:
             nombre_snapshot=detalle.nombre_snapshot,
             precio_snapshot=detalle.precio_snapshot,
             subtotal_snapshot=detalle.subtotal_snapshot,
+            personalizacion=detalle.personalizacion,
         )
 
     def _estado_to_public(self, estado: EstadoPedido) -> EstadoPedidoPublic:

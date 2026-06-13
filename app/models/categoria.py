@@ -19,6 +19,7 @@ class Categoria(BaseModel, table=True):
     descripcion: Optional[str] = Field(default=None, nullable=True)
     orden_display: int = Field(default=0, nullable=False)
     activo: bool = Field(default=True, nullable=False)
+    imagen_url: Optional[str] = Field(default=None, max_length=500)
 
     parent_id: Optional[int] = Field(default=None, foreign_key="categorias.id", nullable=True)
     parent: Optional["Categoria"] = Relationship(
