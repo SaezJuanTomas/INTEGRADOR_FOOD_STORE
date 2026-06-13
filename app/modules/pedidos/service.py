@@ -13,6 +13,7 @@ from app.core.rbac import (
     STATE_EN_CAMINO,
     STATE_EN_PREP,
     STATE_ENTREGADO,
+    STATE_PAGADO,
     STATE_PENDIENTE,
     normalize_role,
     normalize_state,
@@ -41,6 +42,7 @@ from app.modules.pedidos.schemas import (
     ConfirmarPedidoResponse,
     CambiarEstadoPedidoRequest,
 )
+from app.modules.payments.repository import PagoRepository
 
 
 class PedidoService:
@@ -51,8 +53,9 @@ class PedidoService:
     """
 
     TRANSICIONES_VALIDAS = {
-        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_CANCELADO],
+        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_PAGADO, STATE_CANCELADO],
         STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO, STATE_PENDIENTE],
+        STATE_PAGADO: [STATE_EN_PREP, STATE_CANCELADO],
         STATE_EN_PREP: [STATE_EN_CAMINO, STATE_CONFIRMADO],
         STATE_EN_CAMINO: [STATE_ENTREGADO, STATE_EN_PREP],
         STATE_ENTREGADO: [],
@@ -62,12 +65,14 @@ class PedidoService:
     TRANSICIONES_STOCK = {
         (STATE_CONFIRMADO, STATE_PENDIENTE): "restore",
         (STATE_CONFIRMADO, STATE_CANCELADO): "restore",
+        (STATE_PAGADO, STATE_CANCELADO): "restore",
         (STATE_CANCELADO, STATE_PENDIENTE): "reopen",
     }
 
     EVENTOS_WS = {
         STATE_PENDIENTE: "PEDIDO_CREADO",
         STATE_CONFIRMADO: "PEDIDO_CONFIRMADO",
+        STATE_PAGADO: "PEDIDO_PAGADO",
         STATE_EN_PREP: "PEDIDO_EN_PREP",
         STATE_EN_CAMINO: "PEDIDO_EN_CAMINO",
         STATE_ENTREGADO: "PEDIDO_ENTREGADO",
@@ -257,13 +262,13 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
 
-            if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO]:
+            if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO, STATE_PAGADO]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
                 )
 
-            if pedido.estado_codigo == STATE_CONFIRMADO:
+            if pedido.estado_codigo in [STATE_CONFIRMADO, STATE_PAGADO]:
                 detalles = uow.detalles.get_by_pedido_id(pedido_id)
                 for detalle in detalles:
                     producto = uow.productos.get_by_id(detalle.producto_id)
@@ -414,6 +419,7 @@ class PedidoService:
         return pedido
 
     def _to_public(self, pedido: Pedido) -> PedidoPublic:
+        pago = PagoRepository(self._session).get_ultimo_by_pedido(pedido.id)
         return PedidoPublic(
             id=pedido.id,
             usuario_id=pedido.usuario_id,
@@ -426,11 +432,15 @@ class PedidoService:
             total=pedido.total,
             notas=pedido.notas,
             created_at=pedido.created_at,
+            pago_estado=pago.estado if pago else None,
+            pago_mp_status=pago.mp_status if pago else None,
         )
 
     def _to_detail(self, pedido: Pedido) -> PedidoDetail:
         estado = self._estado_repo.get_by_codigo(pedido.estado_codigo)
         detalles = self._detalle_repo.get_by_pedido_id(pedido.id)
+        pago_repo = PagoRepository(self._session)
+        pago = pago_repo.get_ultimo_by_pedido(pedido.id)
 
         return PedidoDetail(
             id=pedido.id,
@@ -450,6 +460,9 @@ class PedidoService:
                 nombre="Desconocido",
             ),
             detalles=[self._detalle_to_public(d) for d in detalles],
+            pago_estado=pago.estado if pago else None,
+            pago_mp_status=pago.mp_status if pago else None,
+            pago_mp_payment_id=pago.mp_payment_id if pago else None,
         )
 
     def _detalle_to_public(self, detalle: DetallePedido) -> DetallePedidoPublic:

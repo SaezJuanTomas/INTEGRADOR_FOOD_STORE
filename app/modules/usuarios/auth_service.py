@@ -74,7 +74,9 @@ class AuthService:
                     )
                 )
 
-        return self._to_public(usuario)
+            result = self._to_public(usuario)
+
+        return result
 
     def login(self, data: LoginRequest) -> TokenResponse:
         """

@@ -10,7 +10,7 @@ export function CarritoPage(): JSX.Element {
   const navigate = useNavigate();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  const handleCheckout = async (): Promise<void> => {
+    const handleCheckout = async (): Promise<void> => {
     if (!user) {
       alert("Sesión inválida. Vuelve a iniciar sesión.");
       return;
@@ -34,18 +34,17 @@ export function CarritoPage(): JSX.Element {
         return;
       }
 
-      await createPedido({
+      const pedido = await createPedido({
         direccion_entrega_id: direccion.id,
         detalles: items.map((item) => ({
           producto_id: item.producto_id,
           cantidad: item.cantidad,
         })),
-        notas: "Checkout rápido sin pago (demo)",
+        notas: "Checkout con pago online",
       });
 
       limpiarCarrito();
-      alert("Pedido creado. Pendiente de confirmar por el administrador.");
-      navigate("/mis-pedidos");
+      navigate(`/payment/${pedido.id}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo realizar el checkout";
       alert(message);

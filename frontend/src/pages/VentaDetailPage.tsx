@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
-import { getPedidoDetail, getHistorialPedido } from "../services/api";
+import { getPedidoDetail, getHistorialPedido, getPagoByPedido, confirmPayment, manualAprobarPago } from "../services/api";
 import type { HistorialEstadoPedidoPublic } from "../services/api";
 
 const stateLabels: Record<string, string> = {
   PENDIENTE: "Pendiente",
   CONFIRMADO: "Confirmado",
+  PAGADO: "Pagado",
   EN_PREP: "Preparando",
   EN_CAMINO: "En camino",
   ENTREGADO: "Entregado",
@@ -15,10 +17,33 @@ const stateLabels: Record<string, string> = {
 const stateColors: Record<string, string> = {
   PENDIENTE: "bg-yellow-100 text-yellow-800",
   CONFIRMADO: "bg-blue-100 text-blue-800",
+  PAGADO: "bg-green-100 text-green-800",
   EN_PREP: "bg-purple-100 text-purple-800",
   EN_CAMINO: "bg-cyan-100 text-cyan-800",
   ENTREGADO: "bg-green-100 text-green-800",
   CANCELADO: "bg-red-100 text-red-800",
+};
+
+const pagoEstadoLabel: Record<string, string> = {
+  pendiente: "Pendiente",
+  aprobado: "Aprobado",
+  rechazado: "Rechazado",
+};
+
+const pagoEstadoColor: Record<string, string> = {
+  pendiente: "bg-yellow-100 text-yellow-800",
+  aprobado: "bg-green-100 text-green-800",
+  rechazado: "bg-red-100 text-red-800",
+};
+
+const mpStatusColor: Record<string, string> = {
+  approved: "bg-green-100 text-green-800",
+  in_process: "bg-blue-100 text-blue-800",
+  pending: "bg-yellow-100 text-yellow-800",
+  rejected: "bg-red-100 text-red-800",
+  cancelled: "bg-slate-100 text-slate-800",
+  refunded: "bg-orange-100 text-orange-800",
+  charged_back: "bg-red-100 text-red-800",
 };
 
 export function VentaDetailPage(): JSX.Element {
@@ -37,6 +62,41 @@ export function VentaDetailPage(): JSX.Element {
     enabled: !Number.isNaN(ventaId),
   });
 
+  const pagoQuery = useQuery({
+    queryKey: ["venta-pago", ventaId],
+    queryFn: () => getPagoByPedido(ventaId),
+    enabled: !Number.isNaN(ventaId),
+    retry: false,
+    refetchInterval: 10_000,
+  });
+
+  const confirmPago = useMutation({
+    mutationFn: () => confirmPayment(ventaId),
+    onSuccess: () => {
+      pagoQuery.refetch();
+      ventaQuery.refetch();
+    },
+  });
+
+  const [manualPaymentId, setManualPaymentId] = useState("");
+
+  const verifyConId = useMutation({
+    mutationFn: (paymentId: number) => confirmPayment(ventaId, paymentId),
+    onSuccess: () => {
+      setManualPaymentId("");
+      pagoQuery.refetch();
+      ventaQuery.refetch();
+    },
+  });
+
+  const aprobarManual = useMutation({
+    mutationFn: () => manualAprobarPago({ pedido_id: ventaId }),
+    onSuccess: () => {
+      pagoQuery.refetch();
+      ventaQuery.refetch();
+    },
+  });
+
   if (Number.isNaN(ventaId)) {
     return <p className="text-red-600">ID de venta inválido.</p>;
   }
@@ -48,6 +108,7 @@ export function VentaDetailPage(): JSX.Element {
 
   const venta = ventaQuery.data;
   const historial = historialQuery.data?.data ?? [];
+  const pago = pagoQuery.isSuccess ? pagoQuery.data : null;
 
   return (
     <div className="space-y-6">
@@ -83,6 +144,122 @@ export function VentaDetailPage(): JSX.Element {
           </dl>
         </div>
       </div>
+
+      {/* Info de pago MP */}
+      {pagoQuery.isLoading ? (
+        <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-orange-900">Pago (MercadoPago)</h2>
+          <p className="text-sm text-slate-500">Consultando estado del pago...</p>
+        </div>
+      ) : pago ? (
+        <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-orange-900">Pago (MercadoPago)</h2>
+            {pago.estado === "pendiente" ? (
+              <span className="text-xs text-slate-400">Se actualiza automáticamente cada 10s</span>
+            ) : null}
+          </div>
+
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Estado del pago</dt>
+              <dd>
+                <span className={`rounded px-2 py-0.5 text-xs font-medium ${pagoEstadoColor[pago.estado] ?? "bg-slate-100"}`}>
+                  {pagoEstadoLabel[pago.estado] ?? pago.estado}
+                </span>
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Estado MP</dt>
+              <dd>
+                {pago.mp_status ? (
+                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${mpStatusColor[pago.mp_status] ?? "bg-slate-100"}`}>
+                    {pago.mp_status}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Detalle MP</dt>
+              <dd className="font-mono text-slate-800">{pago.mp_status_detail ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Payment ID</dt>
+              <dd className="font-mono text-slate-800">{pago.mp_payment_id ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Preference ID</dt>
+              <dd className="font-mono text-slate-800 text-xs">{pago.mp_preference_id ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-slate-600">Monto</dt>
+              <dd className="font-mono font-medium text-orange-900">${Number(pago.monto).toFixed(2)}</dd>
+            </div>
+          </dl>
+
+          {pago.estado === "pendiente" ? (
+            <div className="mt-4 space-y-3 border-t border-orange-100 pt-4">
+              {confirmPago.isError ? (
+                <p className="text-sm text-red-600">Error: {confirmPago.error.message}</p>
+              ) : null}
+              {verifyConId.isError ? (
+                <p className="text-sm text-red-600">Error: {verifyConId.error.message}</p>
+              ) : null}
+              {aprobarManual.isError ? (
+                <p className="text-sm text-red-600">Error: {aprobarManual.error.message}</p>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => confirmPago.mutate()}
+                  disabled={confirmPago.isPending}
+                  className="rounded bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-600 disabled:opacity-50"
+                >
+                  {confirmPago.isPending ? "Verificando..." : "Re-verificar en MP"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => aprobarManual.mutate()}
+                  disabled={aprobarManual.isPending}
+                  className="rounded bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {aprobarManual.isPending ? "Aprobando..." : "Aprobar manualmente (efectivo)"}
+                </button>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder="Payment ID de MP"
+                  value={manualPaymentId}
+                  onChange={(e) => setManualPaymentId(e.target.value)}
+                  className="w-40 rounded border border-slate-300 px-2 py-1 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = Number(manualPaymentId);
+                    if (id > 0) verifyConId.mutate(id);
+                  }}
+                  disabled={verifyConId.isPending || !manualPaymentId}
+                  className="rounded bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                >
+                  {verifyConId.isPending ? "Verificando..." : "Verificar con ID"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-orange-900">Pago (MercadoPago)</h2>
+          <p className="text-sm text-slate-500">No se encontró pago registrado con MercadoPago.</p>
+        </div>
+      )}
 
       {/* Productos vendidos */}
       <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">

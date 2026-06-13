@@ -12,6 +12,7 @@ from app.modules.categorias.router import router as categorias_router
 from app.modules.ingredientes.router import router as ingredientes_router
 from app.modules.productos.router import router as productos_router
 from app.modules.pedidos.router import router as pedidos_router
+from app.modules.payments.router import router as pagos_router
 
 
 @asynccontextmanager
@@ -26,7 +27,8 @@ def _initialize_roles_and_states():
     from sqlmodel import Session, select
     from sqlalchemy import text
     from app.core.database import engine
-    from app.models import Rol, EstadoPedido, FormaPago, Usuario, UsuarioRol
+    from app.models import Rol, EstadoPedido, FormaPago, Usuario, UsuarioRol, Categoria, Producto, ProductoCategoria, Ingrediente, ProductoIngrediente
+    from app.models.producto_ingrediente import UnidadEnum
     
     session = Session(engine)
     
@@ -62,6 +64,7 @@ def _initialize_roles_and_states():
             ("EN_CAMINO", "En Camino", "Pedido en envío"),
             ("ENTREGADO", "Entregado", "Pedido entregado al cliente"),
             ("CANCELADO", "Cancelado", "Pedido cancelado"),
+            ("PAGADO", "Pagado", "Pedido pagado vía MercadoPago"),
         ]
         
         for codigo, nombre, descripcion in estados:
@@ -100,15 +103,85 @@ def _initialize_roles_and_states():
                 Usuario.deleted_at.is_(None),
             )
         ).first()
-        if admin_user:
-            admin_role_link = session.exec(
-                select(UsuarioRol).where(
-                    UsuarioRol.usuario_id == admin_user.id,
-                    UsuarioRol.rol_codigo == ROLE_ADMIN,
-                )
-            ).first()
-            if not admin_role_link:
-                session.add(UsuarioRol(usuario_id=admin_user.id, rol_codigo=ROLE_ADMIN))
+        if not admin_user:
+            admin_user = Usuario(
+                nombre="Admin",
+                apellido="Test",
+                email="admin@test.com",
+                celular="3333333333",
+                password_hash=hash_password("admin123"),
+                activo=True,
+            )
+            session.add(admin_user)
+            session.flush()
+        admin_role_link = session.exec(
+            select(UsuarioRol).where(
+                UsuarioRol.usuario_id == admin_user.id,
+                UsuarioRol.rol_codigo == ROLE_ADMIN,
+            )
+        ).first()
+        if not admin_role_link:
+            session.add(UsuarioRol(usuario_id=admin_user.id, rol_codigo=ROLE_ADMIN))
+
+        # Garantizar que cliente@test.com tenga rol CLIENT
+        cliente_user = session.exec(
+            select(Usuario).where(
+                Usuario.email == "cliente@test.com",
+                Usuario.deleted_at.is_(None),
+            )
+        ).first()
+        if not cliente_user:
+            cliente_user = Usuario(
+                nombre="Cliente",
+                apellido="Test",
+                email="cliente@test.com",
+                celular="4444444444",
+                password_hash=hash_password("cliente123"),
+                activo=True,
+            )
+            session.add(cliente_user)
+            session.flush()
+        cliente_role_link = session.exec(
+            select(UsuarioRol).where(
+                UsuarioRol.usuario_id == cliente_user.id,
+                UsuarioRol.rol_codigo == ROLE_CLIENT,
+            )
+        ).first()
+        if not cliente_role_link:
+            session.add(UsuarioRol(usuario_id=cliente_user.id, rol_codigo=ROLE_CLIENT))
+
+        # Seed de datos de ejemplo (solo si no hay categorías)
+        categorias_existentes = session.exec(select(Categoria).limit(1)).first()
+        if not categorias_existentes:
+            from decimal import Decimal
+            cat_pizzas = Categoria(nombre="Pizzas", descripcion="Pizzas clásicas y especiales", orden_display=1)
+            cat_bebidas = Categoria(nombre="Bebidas", descripcion="Gaseosas, aguas y más", orden_display=2)
+            cat_adicionales = Categoria(nombre="Adicionales", descripcion="Porciones, fainá, etc.", orden_display=3)
+            session.add_all([cat_pizzas, cat_bebidas, cat_adicionales])
+            session.flush()
+
+            prod_muzza = Producto(nombre="Muzza", descripcion="Pizza de mozzarella", precio_base=Decimal("1500"), stock_manual=50, disponible=True, usa_stock_manual=True)
+            prod_napo = Producto(nombre="Napolitana", descripcion="Pizza napolitana con rodajas de tomate", precio_base=Decimal("1800"), stock_manual=40, disponible=True, usa_stock_manual=True)
+            prod_faina = Producto(nombre="Fainá", descripcion="Porción de fainá", precio_base=Decimal("500"), stock_manual=60, disponible=True, usa_stock_manual=True)
+            prod_coca = Producto(nombre="Coca Cola 1.5L", descripcion="Gaseosa Coca Cola 1.5 litros", precio_base=Decimal("1200"), stock_manual=100, disponible=True, usa_stock_manual=True)
+            prod_agua = Producto(nombre="Agua mineral 500ml", descripcion="Agua mineral sin gas", precio_base=Decimal("400"), stock_manual=100, disponible=True, usa_stock_manual=True)
+            session.add_all([prod_muzza, prod_napo, prod_faina, prod_coca, prod_agua])
+            session.flush()
+
+            session.add(ProductoCategoria(producto_id=prod_muzza.id, categoria_id=cat_pizzas.id, es_principal=True))
+            session.add(ProductoCategoria(producto_id=prod_napo.id, categoria_id=cat_pizzas.id, es_principal=True))
+            session.add(ProductoCategoria(producto_id=prod_faina.id, categoria_id=cat_adicionales.id, es_principal=True))
+            session.add(ProductoCategoria(producto_id=prod_coca.id, categoria_id=cat_bebidas.id, es_principal=True))
+            session.add(ProductoCategoria(producto_id=prod_agua.id, categoria_id=cat_bebidas.id, es_principal=True))
+
+            ingrediente_muzza = Ingrediente(nombre="Mozzarella", descripcion="Queso mozzarella", es_alergeno=False, stock_actual=10, stock_minimo=2, costo_unitario=Decimal("200"), unidad_medida=UnidadEnum.GRAMOS)
+            ingrediente_aceite = Ingrediente(nombre="Aceite de oliva", descripcion="Aceite de oliva extra virgen", es_alergeno=False, stock_actual=5, stock_minimo=1, costo_unitario=Decimal("150"), unidad_medida=UnidadEnum.LITROS)
+            session.add_all([ingrediente_muzza, ingrediente_aceite])
+            session.flush()
+
+            session.add(ProductoIngrediente(producto_id=prod_muzza.id, ingrediente_id=ingrediente_muzza.id, cantidad=200, unidad=UnidadEnum.GRAMOS, es_removible=False))
+            session.add(ProductoIngrediente(producto_id=prod_napo.id, ingrediente_id=ingrediente_muzza.id, cantidad=180, unidad=UnidadEnum.GRAMOS, es_removible=False))
+            session.add(ProductoIngrediente(producto_id=prod_napo.id, ingrediente_id=ingrediente_aceite.id, cantidad=0.05, unidad=UnidadEnum.LITROS, es_removible=True))
 
         # Garantizar que stock@test.com tenga rol STOCK
         stock_user = session.exec(
@@ -242,6 +315,9 @@ app.include_router(ingredientes_router, prefix="/ingredientes", tags=["ingredien
 
 # Router de pedidos
 app.include_router(pedidos_router, prefix="/pedidos", tags=["pedidos"])
+
+# Router de pagos (MercadoPago)
+app.include_router(pagos_router)
 
 
 @app.get("/", tags=["health"])

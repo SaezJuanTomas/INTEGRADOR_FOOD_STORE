@@ -7,7 +7,7 @@ export function LoginPage(): JSX.Element {
   const { login, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState<string>("admin@test.com");
-  const [password, setPassword] = useState<string>("contraseña123");
+  const [password, setPassword] = useState<string>("admin123");
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -75,16 +75,15 @@ export function LoginPage(): JSX.Element {
         <div className="mb-3 rounded border border-orange-100 bg-orange-50 p-3 text-sm text-orange-800">
           <p className="mb-2 font-semibold">Credenciales de prueba</p>
           <ul className="mb-2 list-inside list-disc">
-            <li>Admin — email: <strong>admin@test.com</strong> | clave: <strong>contraseña123</strong></li>
+            <li>Admin — email: <strong>admin@test.com</strong> | clave: <strong>admin123</strong></li>
             <li>Stock — email: <strong>stock@test.com</strong> | clave: <strong>stock123</strong></li>
             <li>Pedidos — email: <strong>pedidos@test.com</strong> | clave: <strong>pedidos123</strong></li>
             <li>Cliente — email: <strong>cliente@test.com</strong> | clave: <strong>cliente123</strong></li>
-            <li>Demo — usuario: <strong>juan@test.com</strong> | clave: <strong>password123</strong></li>
           </ul>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => { setEmail("admin@test.com"); setPassword("contraseña123"); }}
+              onClick={() => { setEmail("admin@test.com"); setPassword("admin123"); }}
               disabled={isLoading}
               className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
             >Usar Admin</button>
@@ -106,12 +105,6 @@ export function LoginPage(): JSX.Element {
               disabled={isLoading}
               className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
             >Usar Cliente</button>
-            <button
-              type="button"
-              onClick={() => { setEmail("juan@test.com"); setPassword("password123"); }}
-              disabled={isLoading}
-              className="rounded bg-orange-200 px-2 py-1 text-xs disabled:opacity-50"
-            >Usar Demo</button>
           </div>
         </div>
         <button 

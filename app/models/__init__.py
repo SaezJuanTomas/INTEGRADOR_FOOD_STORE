@@ -20,6 +20,8 @@ from app.models.forma_pago import FormaPago  # noqa: F401
 from app.models.pedido import Pedido  # noqa: F401
 from app.models.detalle_pedido import DetallePedido  # noqa: F401
 from app.models.historial_estado_pedido import HistorialEstadoPedido  # noqa: F401
+from app.models.pago import Pago  # noqa: F401
+from app.models.unidad_medida import UnidadMedida  # noqa: F401
 
 __all__ = [
     "Categoria",
@@ -36,4 +38,6 @@ __all__ = [
     "Pedido",
     "DetallePedido",
     "HistorialEstadoPedido",
+    "Pago",
+    "UnidadMedida",
 ]

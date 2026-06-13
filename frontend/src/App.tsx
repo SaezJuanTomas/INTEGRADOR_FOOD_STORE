@@ -14,6 +14,8 @@ import { ProductDetailPage } from "./pages/ProductDetailPage";
 import { VentasPage } from "./pages/VentasPage";
 import { LoginPage } from "./pages/LoginPage";
 import { CarritoPage } from "./pages/CarritoPage";
+import PaymentPage from "./pages/PaymentPage";
+import OrderRedirectPage from "./pages/OrderRedirectPage";
 import { MisPedidosPage } from "./pages/MisPedidosPage";
 import { AccessDeniedPage } from "./pages/AccessDeniedPage";
 import { ProductosClientePage } from "./pages/ProductosClientePage";
@@ -22,8 +24,10 @@ import { GastosAdminPage } from "./pages/GastosAdminPage";
 import { PerfilPage } from "./pages/PerfilPage";
 import { GestionStockPage } from "./pages/GestionStockPage";
 import { OperacionPedidoDetailPage } from "./pages/OperacionPedidoDetailPage";
+import { OperacionesPedidosPage } from "./pages/OperacionesPedidosPage";
 import { ProductosInternosPage } from "./pages/ProductosInternosPage";
 import { VentaDetailPage } from "./pages/VentaDetailPage";
+import { ClientePedidoDetailPage } from "./pages/ClientePedidoDetailPage";
 
 interface DashboardLayoutProps {
   children: JSX.Element;
@@ -140,7 +144,7 @@ export function App(): JSX.Element {
           element={
             <ProtectedRoute requiredRoles={["ADMIN", "PEDIDOS"]}>
               <DashboardLayout>
-                <VentasPage />
+                <OperacionesPedidosPage />
               </DashboardLayout>
             </ProtectedRoute>
           }
@@ -237,6 +241,25 @@ export function App(): JSX.Element {
         />
 
         <Route
+          path="/payment/:orderId"
+          element={
+            <ProtectedRoute requiredRoles={["CLIENT"]}>
+              <PaymentPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* MP redirect handler */}
+        <Route
+          path="/orders/:pedidoId/:status"
+          element={
+            <ProtectedRoute>
+              <OrderRedirectPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/mis-pedidos"
           element={
             <ProtectedRoute requiredRoles={["CLIENT"]}>
@@ -253,6 +276,17 @@ export function App(): JSX.Element {
             <ProtectedRoute requiredRoles={["CLIENT"]}>
               <DashboardLayout>
                 <PerfilPage />
+              </DashboardLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/cliente/pedido/:id"
+          element={
+            <ProtectedRoute requiredRoles={["CLIENT"]}>
+              <DashboardLayout>
+                <ClientePedidoDetailPage />
               </DashboardLayout>
             </ProtectedRoute>
           }

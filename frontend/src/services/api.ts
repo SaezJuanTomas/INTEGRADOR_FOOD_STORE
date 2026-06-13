@@ -5,7 +5,7 @@ import type { Producto, ProductoCreate, ProductoUpdate } from "../models/Product
 
 const API_BASE_URLS = ["/api"];
 const TOKEN_KEY = "food_store_token";
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE_URLS[0],
   withCredentials: true,
   timeout: 10000,
@@ -155,6 +155,7 @@ export interface PedidoPublic {
   id: number;
   usuario_id: number;
   direccion_entrega_id: number;
+  forma_pago_codigo?: string | null;
   estado_codigo: string;
   subtotal: number | string;
   descuento: number | string;
@@ -162,6 +163,8 @@ export interface PedidoPublic {
   total: number | string;
   notas?: string | null;
   created_at?: string | null;
+  pago_estado?: string | null;
+  pago_mp_status?: string | null;
 }
 
 export async function loginRequest(payload: LoginPayload): Promise<LoginResponse> {
@@ -460,6 +463,66 @@ export function getPedidoDetail(pedidoId: number): Promise<PedidoDetail> {
 
 export function getHistorialPedido(pedidoId: number): Promise<{ data: HistorialEstadoPedidoPublic[] }> {
   return request<{ data: HistorialEstadoPedidoPublic[] }>(`/pedidos/${pedidoId}/historial`);
+}
+
+// ============================================================================
+// PAYMENT OPERATIONS (MercadoPago)
+// ============================================================================
+
+export interface CreatePreferenceResponse {
+  pago_id: number
+  preference_id: string
+  init_point: string | null
+  public_key: string | null
+}
+
+export interface ConfirmPaymentResponse {
+  estado: string | null
+  pedido_id: number
+}
+
+export function createPreference(pedidoId: number): Promise<CreatePreferenceResponse> {
+  return request<CreatePreferenceResponse>("/api/v1/pagos/create-preference", {
+    method: "POST",
+    data: { pedido_id: pedidoId },
+  });
+}
+
+export function confirmPayment(pedidoId: number, paymentId?: number): Promise<ConfirmPaymentResponse> {
+  return request<ConfirmPaymentResponse>("/api/v1/pagos/confirm", {
+    method: "POST",
+    data: { pedido_id: pedidoId, payment_id: paymentId },
+  });
+}
+
+export interface PagoPublic {
+  id: number
+  pedido_id: number
+  monto: number
+  estado: string
+  mp_preference_id: string | null
+  mp_init_point: string | null
+  mp_payment_id: number | null
+  mp_merchant_order_id: number | null
+  mp_status: string | null
+  mp_status_detail: string | null
+  created_at: string | null
+}
+
+export function getPagoByPedido(pedidoId: number): Promise<PagoPublic> {
+  return request<PagoPublic>(`/api/v1/pagos/${pedidoId}`);
+}
+
+export interface ManualAprobarPayload {
+  pedido_id: number
+  mp_payment_id?: number
+}
+
+export function manualAprobarPago(payload: ManualAprobarPayload): Promise<ConfirmPaymentResponse> {
+  return request<ConfirmPaymentResponse>("/api/v1/pagos/manual-aprobar", {
+    method: "POST",
+    data: payload,
+  });
 }
 
 export type { ListResponse };

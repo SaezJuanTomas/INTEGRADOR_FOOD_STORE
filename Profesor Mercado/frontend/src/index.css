@@ -1,0 +1,8 @@
+/**
+ * Estilos globales de la aplicación.
+ * Tailwind CSS v4 se importa con @import.
+ *
+ * Tailwind genera solo las clases que se usan en el código
+ * (tree-shaking automático con Vite + @tailwindcss/vite).
+ */
+@import "tailwindcss";

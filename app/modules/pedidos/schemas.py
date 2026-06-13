@@ -80,6 +80,8 @@ class PedidoPublic(SQLModel):
     total: Decimal
     notas: Optional[str] = None
     created_at: Optional[datetime] = None
+    pago_estado: Optional[str] = None
+    pago_mp_status: Optional[str] = None
 
 
 class PedidoDetail(PedidoPublic):
@@ -87,6 +89,9 @@ class PedidoDetail(PedidoPublic):
     updated_at: datetime
     estado: EstadoPedidoPublic
     detalles: List[DetallePedidoPublic] = Field(default_factory=list)
+    pago_estado: Optional[str] = None
+    pago_mp_status: Optional[str] = None
+    pago_mp_payment_id: Optional[int] = None
 
 
 class PedidoList(SQLModel):

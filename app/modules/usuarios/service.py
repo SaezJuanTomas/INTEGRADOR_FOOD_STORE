@@ -281,7 +281,9 @@ class UsuarioService:
 
             direccion = uow.direcciones.add(direccion)
 
-        return self._direccion_to_public(direccion)
+            result = self._direccion_to_public(direccion)
+
+        return result
 
     def get_direccion(self, usuario_id: int, direccion_id: int) -> DireccionEntregaPublic:
         """

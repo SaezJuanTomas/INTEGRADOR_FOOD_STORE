@@ -1,10 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getPedidosWebSocketUrl, listPedidos, type PedidoPublic } from "../services/api";
+
+const ESTADOS = ["PENDIENTE", "CONFIRMADO", "EN_PREP", "EN_CAMINO", "ENTREGADO", "CANCELADO"] as const;
+
+const estadoColor: Record<string, string> = {
+  PENDIENTE: "bg-yellow-100 text-yellow-800",
+  CONFIRMADO: "bg-blue-100 text-blue-800",
+  EN_PREP: "bg-purple-100 text-purple-800",
+  EN_CAMINO: "bg-orange-100 text-orange-800",
+  ENTREGADO: "bg-green-100 text-green-800",
+  CANCELADO: "bg-red-100 text-red-800",
+};
 
 export function MisPedidosPage(): JSX.Element {
   const [pedidos, setPedidos] = useState<PedidoPublic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchId, setSearchId] = useState("");
+  const [filterEstado, setFilterEstado] = useState("");
 
   useEffect(() => {
     const cargarPedidos = async (): Promise<void> => {
@@ -22,26 +36,24 @@ export function MisPedidosPage(): JSX.Element {
     cargarPedidos();
 
     const ws = new WebSocket(getPedidosWebSocketUrl());
-    ws.onmessage = () => {
-      cargarPedidos();
-    };
+    ws.onmessage = cargarPedidos;
 
-    return () => {
-      ws.close();
-    };
+    return () => { ws.close(); };
   }, []);
 
-  const getEstadoColor = (estado: string): string => {
-    const colores: Record<string, string> = {
-      PENDIENTE: "bg-yellow-100 text-yellow-800",
-      CONFIRMADO: "bg-blue-100 text-blue-800",
-      EN_PREP: "bg-purple-100 text-purple-800",
-      EN_CAMINO: "bg-orange-100 text-orange-800",
-      ENTREGADO: "bg-green-100 text-green-800",
-      CANCELADO: "bg-red-100 text-red-800",
-    };
-    return colores[estado] || "bg-gray-100 text-gray-800";
-  };
+  const filtrados = useMemo(() => {
+    let items = pedidos;
+    if (searchId.trim()) {
+      const id = parseInt(searchId, 10);
+      if (!Number.isNaN(id)) {
+        items = items.filter((p) => p.id === id);
+      }
+    }
+    if (filterEstado) {
+      items = items.filter((p) => p.estado_codigo === filterEstado);
+    }
+    return items;
+  }, [pedidos, searchId, filterEstado]);
 
   if (loading) {
     return (
@@ -78,36 +90,59 @@ export function MisPedidosPage(): JSX.Element {
     <div className="space-y-4">
       <h1 className="text-3xl font-bold text-orange-900">Mis Pedidos</h1>
 
-      <div className="space-y-3">
-        {pedidos.map((pedido) => (
-          <article
-            key={pedido.id}
-            className="block rounded-lg border border-orange-100 bg-white/90 p-4 shadow-sm transition hover:shadow-md hover:border-orange-200"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="font-semibold text-orange-900">Pedido #{pedido.id}</h3>
-                <p className="text-sm text-orange-700">
-                  {pedido.created_at
-                    ? new Date(pedido.created_at).toLocaleDateString("es-AR")
-                    : "Sin fecha"}
-                </p>
-              </div>
-
-              <div className="text-right">
-                <span
-                  className={`rounded-full px-3 py-1 text-sm font-medium ${getEstadoColor(
-                    pedido.estado_codigo
-                  )}`}
-                >
-                  {pedido.estado_codigo}
-                </span>
-                <p className="mt-2 font-bold text-orange-900">${Number(pedido.total).toFixed(2)}</p>
-              </div>
-            </div>
-          </article>
-        ))}
+      <div className="flex flex-wrap gap-3">
+        <input
+          type="number"
+          placeholder="Buscar por # de pedido"
+          value={searchId}
+          onChange={(e) => setSearchId(e.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 focus:border-orange-400 focus:outline-none"
+        />
+        <select
+          value={filterEstado}
+          onChange={(e) => setFilterEstado(e.target.value)}
+          className="rounded-lg border border-orange-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-orange-400 focus:outline-none"
+        >
+          <option value="">Todos los estados</option>
+          {ESTADOS.map((e) => (
+            <option key={e} value={e}>{e}</option>
+          ))}
+        </select>
       </div>
+
+      {filtrados.length === 0 ? (
+        <p className="text-sm text-slate-600">No se encontraron pedidos con esos filtros.</p>
+      ) : (
+        <div className="space-y-3">
+          {filtrados.map((pedido) => (
+            <Link
+              key={pedido.id}
+              to={`/cliente/pedido/${pedido.id}`}
+              className="block rounded-lg border border-orange-100 bg-white/90 p-4 shadow-sm transition hover:shadow-md hover:border-orange-200"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-orange-900">Pedido #{pedido.id}</h3>
+                  <p className="text-sm text-orange-700">
+                    {pedido.created_at
+                      ? new Date(pedido.created_at).toLocaleDateString("es-AR")
+                      : "Sin fecha"}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <span
+                    className={`rounded-full px-3 py-1 text-sm font-medium ${estadoColor[pedido.estado_codigo] ?? "bg-gray-100 text-gray-800"}`}
+                  >
+                    {pedido.estado_codigo}
+                  </span>
+                  <p className="mt-2 font-bold text-orange-900">${Number(pedido.total).toFixed(2)}</p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

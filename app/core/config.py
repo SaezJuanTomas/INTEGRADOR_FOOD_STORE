@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    ENVIRONMENT: str = "development"
     postgres_user: str = "postgres"
     postgres_password: str = "password"
     postgres_db: str = "food_store_db"
@@ -14,10 +15,25 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
     COOKIE_SAMESITE: str = "lax"
     COOKIE_NAME: str = "access_token"
+    # MercadoPago (nuevos nombres)
+    MP_ACCESS_TOKEN: str = ""
+    MP_PUBLIC_KEY: str = ""
+    MP_WEBHOOK_URL: str = ""
+    NGROK_URL: str = ""
+
+    # MercadoPago (nombres anteriores, compatibilidad)
+    MERCADOPAGO_ACCESS_TOKEN: str = ""
+    MERCADOPAGO_PUBLIC_KEY: str = ""
+
+    # URLs para frontend y webhooks
+    VITE_FRONTEND_URL: str = "http://localhost:5500"
+    VITE_API_URL: str = "http://localhost:8000"
 
     @computed_field
     @property
     def DATABASE_URL(self) -> str:
+        if self.ENVIRONMENT == "development":
+            return "sqlite:///./food_store.db"
         return (
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
