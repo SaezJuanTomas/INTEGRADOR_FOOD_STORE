@@ -15,15 +15,13 @@ function asNumber(value: number | string): number {
 const estadoColor: Record<string, string> = {
   PENDIENTE: "text-yellow-600",
   CONFIRMADO: "text-blue-600",
-  PAGADO: "text-green-600",
   EN_PREP: "text-purple-600",
-  EN_CAMINO: "text-cyan-600",
   ENTREGADO: "text-green-700",
   CANCELADO: "text-red-600",
 };
 
 function puedeCancelar(estado: string): boolean {
-  return ["PENDIENTE", "CONFIRMADO", "PAGADO"].includes(estado);
+  return ["PENDIENTE", "CONFIRMADO"].includes(estado);
 }
 
 export function OperacionesPedidosPage(): JSX.Element {
@@ -75,9 +73,7 @@ export function OperacionesPedidosPage(): JSX.Element {
     const flujo: Record<string, string | null> = {
       PENDIENTE: "CONFIRMADO",
       CONFIRMADO: "EN_PREP",
-      PAGADO: "EN_PREP",
-      EN_PREP: "EN_CAMINO",
-      EN_CAMINO: "ENTREGADO",
+      EN_PREP: "ENTREGADO",
       ENTREGADO: null,
       CANCELADO: null,
     };
@@ -86,7 +82,7 @@ export function OperacionesPedidosPage(): JSX.Element {
 
   const stats = useMemo(() => {
     const pendientes = pedidos.filter((p) => p.estado_codigo === "PENDIENTE" || p.estado_codigo === "CONFIRMADO");
-    const activos = pedidos.filter((p) => p.estado_codigo === "EN_PREP" || p.estado_codigo === "EN_CAMINO");
+    const activos = pedidos.filter((p) => p.estado_codigo === "EN_PREP");
     return { pendientes: pendientes.length, activos: activos.length };
   }, [pedidos]);
 
@@ -103,7 +99,7 @@ export function OperacionesPedidosPage(): JSX.Element {
       <div className="mb-5">
         <h1 className="text-3xl font-semibold text-orange-950">Operaciones de Pedidos</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {pedidos.length} pedidos &middot; {stats.pendientes} pendientes/confirmados &middot; {stats.activos} en preparación/camino
+          {pedidos.length} pedidos &middot; {stats.pendientes} pendientes/confirmados &middot; {stats.activos} en preparación
         </p>
       </div>
 

@@ -14,6 +14,8 @@ from app.modules.productos.router import router as productos_router
 from app.modules.pedidos.router import router as pedidos_router
 from app.modules.payments.router import router as pagos_router
 from app.modules.estadisticas.router import router as estadisticas_router
+from app.modules.uploads.router import router as uploads_router
+from app.modules.direcciones.router import router as direcciones_router
 from app.core.rate_limit import RateLimitMiddleware
 
 
@@ -58,15 +60,13 @@ def _initialize_roles_and_states():
                 rol = Rol(codigo=codigo, nombre=nombre, descripcion=descripcion)
                 session.add(rol)
 
-        # Inicializar estados de pedido
+        # Inicializar estados de pedido (5 estados según TPI)
         estados = [
             ("PENDIENTE", "Pendiente", "Pedido creado, aguardando confirmación"),
-            ("CONFIRMADO", "Confirmado", "Pedido confirmado, se descantó stock"),
+            ("CONFIRMADO", "Confirmado", "Pedido confirmado, se descontó stock"),
             ("EN_PREP", "En Preparación", "Pedido en preparación"),
-            ("EN_CAMINO", "En Camino", "Pedido en envío"),
             ("ENTREGADO", "Entregado", "Pedido entregado al cliente"),
             ("CANCELADO", "Cancelado", "Pedido cancelado"),
-            ("PAGADO", "Pagado", "Pedido pagado vía MercadoPago"),
         ]
         
         for codigo, nombre, descripcion in estados:
@@ -97,6 +97,34 @@ def _initialize_roles_and_states():
                 text("UPDATE historiales_estado_pedido SET estado_hacia_codigo = 'EN_PREP' WHERE estado_hacia_codigo = 'PREPARANDO'")
             )
             session.delete(estado_preparando)
+
+        # Migrar PAGADO → CONFIRMADO (se eliminó PAGADO del FSM)
+        estado_pagado = session.exec(select(EstadoPedido).where(EstadoPedido.codigo == "PAGADO")).first()
+        if estado_pagado:
+            session.execute(
+                text("UPDATE pedidos SET estado_codigo = 'CONFIRMADO' WHERE estado_codigo = 'PAGADO'")
+            )
+            session.execute(
+                text("UPDATE historiales_estado_pedido SET estado_desde_codigo = 'CONFIRMADO' WHERE estado_desde_codigo = 'PAGADO'")
+            )
+            session.execute(
+                text("UPDATE historiales_estado_pedido SET estado_hacia_codigo = 'CONFIRMADO' WHERE estado_hacia_codigo = 'PAGADO'")
+            )
+            session.delete(estado_pagado)
+
+        # Migrar EN_CAMINO → EN_PREP (se eliminó EN_CAMINO del FSM)
+        estado_en_camino = session.exec(select(EstadoPedido).where(EstadoPedido.codigo == "EN_CAMINO")).first()
+        if estado_en_camino:
+            session.execute(
+                text("UPDATE pedidos SET estado_codigo = 'EN_PREP' WHERE estado_codigo = 'EN_CAMINO'")
+            )
+            session.execute(
+                text("UPDATE historiales_estado_pedido SET estado_desde_codigo = 'EN_PREP' WHERE estado_desde_codigo = 'EN_CAMINO'")
+            )
+            session.execute(
+                text("UPDATE historiales_estado_pedido SET estado_hacia_codigo = 'EN_PREP' WHERE estado_hacia_codigo = 'EN_CAMINO'")
+            )
+            session.delete(estado_en_camino)
 
         # Garantizar que admin@test.com tenga rol ADMIN
         admin_user = session.exec(
@@ -317,6 +345,9 @@ app.include_router(categorias_router, prefix="/categorias", tags=["categorias"])
 app.include_router(productos_router, prefix="/productos", tags=["productos"])
 app.include_router(ingredientes_router, prefix="/ingredientes", tags=["ingredientes"])
 
+# Router de direcciones
+app.include_router(direcciones_router)
+
 # Router de pedidos
 app.include_router(pedidos_router, prefix="/pedidos", tags=["pedidos"])
 
@@ -325,6 +356,9 @@ app.include_router(pagos_router)
 
 # Router de estadísticas
 app.include_router(estadisticas_router, prefix="/api/v1/estadisticas", tags=["estadisticas"])
+
+# Router de uploads (Cloudinary)
+app.include_router(uploads_router)
 
 
 @app.get("/", tags=["health"])

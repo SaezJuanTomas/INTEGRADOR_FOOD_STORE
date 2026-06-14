@@ -191,6 +191,36 @@ class ProductoService:
 
         return result
 
+    def get_public(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        categoria_id: int | None = None,
+        q: str | None = None,
+    ) -> ProductoList:
+        """Obtener solo productos activos, disponibles y no eliminados (para público)."""
+        with CatalogUnitOfWork(self._session) as uow:
+            items = uow.productos.get_disponibles(offset=0, limit=10000)
+            if categoria_id is not None:
+                items = [
+                    item
+                    for item in items
+                    if any(rel.categoria_id == categoria_id for rel in item.productos_categorias)
+                ]
+            if q:
+                q_lower = q.strip().lower()
+                if q_lower:
+                    items = [
+                        item
+                        for item in items
+                        if q_lower in item.nombre.lower()
+                        or (item.descripcion is not None and q_lower in item.descripcion.lower())
+                    ]
+            total = len(items)
+            items = items[offset : offset + limit]
+            data = [self._to_public(item) for item in items]
+        return ProductoList(data=data, total=total)
+
     def get_all(
         self,
         offset: int = 0,
@@ -249,8 +279,9 @@ class ProductoService:
             producto = uow.productos.get_by_id(producto_id)
             if producto is None or not self._is_active_product(producto):
                 raise HTTPException(status_code=404, detail="Producto no encontrado")
+
             if not producto.usa_stock_manual:
-                raise HTTPException(status_code=409, detail="El producto no usa stock manual")
+                producto.usa_stock_manual = True
 
             producto.stock_manual = stock_cantidad
             producto.updated_at = datetime.now(timezone.utc)

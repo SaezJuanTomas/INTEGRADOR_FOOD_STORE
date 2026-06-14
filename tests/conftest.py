@@ -57,7 +57,7 @@ def app_fixture(engine_test):
 
 def _seed_test_data(session: Session) -> None:
     from app.core.rbac import ROLE_ADMIN, ROLE_CLIENT
-    from app.core.rbac import STATE_PENDIENTE, STATE_CONFIRMADO, STATE_PAGADO, STATE_EN_PREP, STATE_EN_CAMINO, STATE_ENTREGADO, STATE_CANCELADO
+    from app.core.rbac import STATE_PENDIENTE, STATE_CONFIRMADO, STATE_EN_PREP, STATE_ENTREGADO, STATE_CANCELADO
     from app.core.security import hash_password
     from app.models import Rol, EstadoPedido, FormaPago, Usuario, UsuarioRol
     from sqlmodel import select
@@ -73,9 +73,7 @@ def _seed_test_data(session: Session) -> None:
     for codigo, nombre, descripcion in [
         (STATE_PENDIENTE, "Pendiente", ""),
         (STATE_CONFIRMADO, "Confirmado", ""),
-        (STATE_PAGADO, "Pagado", ""),
         (STATE_EN_PREP, "En Preparación", ""),
-        (STATE_EN_CAMINO, "En Camino", ""),
         (STATE_ENTREGADO, "Entregado", ""),
         (STATE_CANCELADO, "Cancelado", ""),
     ]:

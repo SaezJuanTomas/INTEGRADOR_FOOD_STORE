@@ -12,7 +12,7 @@ export function CarritoPage(): JSX.Element {
 
     const handleCheckout = async (): Promise<void> => {
     if (!user) {
-      alert("Sesión inválida. Vuelve a iniciar sesión.");
+      navigate("/login?redirect=/carrito");
       return;
     }
 

@@ -34,12 +34,15 @@ class UnitOfWork:
         Controla automáticamente la transacción:
         - Si no hubo excepción → commit()
         - Si hubo excepción → rollback()
+        - Siempre cierra la sesión (try/finally).
         """
-        if exc_type is None:
-            self._session.commit()
-        else:
-            self._session.rollback()
-        self._session.close()
+        try:
+            if exc_type is None:
+                self._session.commit()
+            else:
+                self._session.rollback()
+        finally:
+            self._session.close()
 
     def commit(self) -> None:
         """Ejecuta un commit explícito."""

@@ -1,24 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { getPedidosWebSocketUrl, listPedidos, type PedidoPublic } from "../services/api";
+import { Link, useNavigate } from "react-router-dom";
+import { getPedidosWebSocketUrl, listPedidos, cancelarPedido, type PedidoPublic } from "../services/api";
 
-const ESTADOS = ["PENDIENTE", "CONFIRMADO", "EN_PREP", "EN_CAMINO", "ENTREGADO", "CANCELADO"] as const;
+const ESTADOS = ["PENDIENTE", "CONFIRMADO", "EN_PREP", "ENTREGADO", "CANCELADO"] as const;
 
 const estadoColor: Record<string, string> = {
   PENDIENTE: "bg-yellow-100 text-yellow-800",
   CONFIRMADO: "bg-blue-100 text-blue-800",
   EN_PREP: "bg-purple-100 text-purple-800",
-  EN_CAMINO: "bg-orange-100 text-orange-800",
   ENTREGADO: "bg-green-100 text-green-800",
   CANCELADO: "bg-red-100 text-red-800",
 };
 
 export function MisPedidosPage(): JSX.Element {
+  const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<PedidoPublic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchId, setSearchId] = useState("");
   const [filterEstado, setFilterEstado] = useState("");
+  const [cancelandoId, setCancelandoId] = useState<number | null>(null);
+
+  const handleCancelar = async (pedido: PedidoPublic) => {
+    if (!window.confirm(`¿Cancelar pedido #${pedido.id}?`)) return;
+    setCancelandoId(pedido.id);
+    try {
+      await cancelarPedido(pedido.id, "Cancelado por el cliente");
+      navigate("/mis-pedidos");
+      setPedidos((prev) => prev.map((p) => p.id === pedido.id ? { ...p, estado_codigo: "CANCELADO" } : p));
+    } catch {
+      alert("No se pudo cancelar el pedido");
+    } finally {
+      setCancelandoId(null);
+    }
+  };
 
   useEffect(() => {
     const cargarPedidos = async (): Promise<void> => {
@@ -130,13 +145,27 @@ export function MisPedidosPage(): JSX.Element {
                   </p>
                 </div>
 
-                <div className="text-right">
-                  <span
-                    className={`rounded-full px-3 py-1 text-sm font-medium ${estadoColor[pedido.estado_codigo] ?? "bg-gray-100 text-gray-800"}`}
-                  >
-                    {pedido.estado_codigo}
-                  </span>
-                  <p className="mt-2 font-bold text-orange-900">${Number(pedido.total).toFixed(2)}</p>
+                <div className="flex items-center gap-3">
+                  {pedido.estado_codigo === "PENDIENTE" && (
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleCancelar(pedido);
+                      }}
+                      disabled={cancelandoId === pedido.id}
+                      className="rounded bg-red-100 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-200 disabled:opacity-50"
+                    >
+                      {cancelandoId === pedido.id ? "..." : "Cancelar"}
+                    </button>
+                  )}
+                  <div className="text-right">
+                    <span
+                      className={`rounded-full px-3 py-1 text-sm font-medium ${estadoColor[pedido.estado_codigo] ?? "bg-gray-100 text-gray-800"}`}
+                    >
+                      {pedido.estado_codigo}
+                    </span>
+                    <p className="mt-2 font-bold text-orange-900">${Number(pedido.total).toFixed(2)}</p>
+                  </div>
                 </div>
               </div>
             </Link>

@@ -224,6 +224,7 @@ function ProductoIngredientsEditor({
   setForm: Dispatch<SetStateAction<EntityForm>>;
 }): JSX.Element {
   const usaStockManual = Boolean(form.usa_stock_manual);
+  const [ingredienteSearch, setIngredienteSearch] = useState<Record<number, string>>({});
   const ingredientesQuery = useQuery({
     queryKey: ["ingredientes", "options"],
     queryFn: () => ingredienteService.getAll(0, 100, false),
@@ -300,33 +301,49 @@ function ProductoIngredientsEditor({
             const unidadEsperada = ingredienteInfo?.unidad_medida ?? ingrediente.unidad;
             return (
               <div key={`${ingrediente.ingrediente_id}-${index}`} className="grid gap-2 rounded bg-orange-50 p-3 md:grid-cols-2 lg:grid-cols-[2fr,1fr,1fr,auto,auto,auto]">
-                <select
-                  className="min-w-0 rounded border border-orange-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none"
-                  value={ingrediente.ingrediente_id}
-                  onChange={(event) => {
-                    const nextId = Number(event.target.value);
-                    if (
-                      ingredientesSeleccionados.some(
-                        (row, rowIndex) => rowIndex !== index && row.ingrediente_id === nextId
-                      )
-                    ) {
-                      alert("Este ingrediente ya está agregado en otra fila.");
-                      return;
-                    }
+                <div className="min-w-0">
+                  <input
+                    type="text"
+                    placeholder="Buscar ingrediente..."
+                    className="mb-1 w-full rounded border border-orange-200 px-3 py-1.5 text-xs focus:border-orange-400 focus:outline-none"
+                    value={ingredienteSearch[index] ?? ""}
+                    onChange={(e) => setIngredienteSearch((prev) => ({ ...prev, [index]: e.target.value }))}
+                  />
+                  <select
+                    className="w-full rounded border border-orange-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none"
+                    value={ingrediente.ingrediente_id}
+                    onChange={(event) => {
+                      const nextId = Number(event.target.value);
+                      if (
+                        ingredientesSeleccionados.some(
+                          (row, rowIndex) => rowIndex !== index && row.ingrediente_id === nextId
+                        )
+                      ) {
+                        alert("Este ingrediente ya está agregado en otra fila.");
+                        return;
+                      }
 
-                    const nextInfo = ingredientesPorId.get(nextId);
-                    updateRow(index, {
-                      ingrediente_id: nextId,
-                      unidad: nextInfo?.unidad_medida ?? ingrediente.unidad,
-                    });
-                  }}
-                >
-                  {ingredientesDisponibles.map((opcion) => (
-                    <option key={opcion.id} value={opcion.id}>
-                      {opcion.nombre} ({opcion.unidad_medida})
-                    </option>
-                  ))}
-                </select>
+                      const nextInfo = ingredientesPorId.get(nextId);
+                      updateRow(index, {
+                        ingrediente_id: nextId,
+                        unidad: nextInfo?.unidad_medida ?? ingrediente.unidad,
+                      });
+                      setIngredienteSearch((prev) => ({ ...prev, [index]: "" }));
+                    }}
+                  >
+                    {ingredientesDisponibles
+                      .filter((opcion) =>
+                        (ingredienteSearch[index] ?? "").trim() === ""
+                          ? true
+                          : opcion.nombre.toLowerCase().includes((ingredienteSearch[index] ?? "").toLowerCase())
+                      )
+                      .map((opcion) => (
+                        <option key={opcion.id} value={opcion.id}>
+                          {opcion.nombre} ({opcion.unidad_medida})
+                        </option>
+                      ))}
+                  </select>
+                </div>
 
                 <input
                   type="number"

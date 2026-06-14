@@ -27,10 +27,7 @@ export default function PaymentPage() {
   const pagarEnEfectivo = async () => {
     setCashLoading(true)
     try {
-      await api.patch(`/pedidos/${orderId}/estado`, {
-        estado_codigo: "CONFIRMADO",
-        motivo: "Pago en efectivo al retirar/recibir",
-      })
+      await api.patch(`/pedidos/${orderId}/confirmar`, { forma_pago_codigo: "EFECTIVO" })
       navigate(`/mis-pedidos`)
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.message || "Error al confirmar pedido"

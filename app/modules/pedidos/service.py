@@ -10,10 +10,8 @@ from app.core.rbac import (
     ROLE_PEDIDOS,
     STATE_CANCELADO,
     STATE_CONFIRMADO,
-    STATE_EN_CAMINO,
     STATE_EN_PREP,
     STATE_ENTREGADO,
-    STATE_PAGADO,
     STATE_PENDIENTE,
     normalize_role,
     normalize_state,
@@ -53,28 +51,51 @@ class PedidoService:
     """
 
     TRANSICIONES_VALIDAS = {
-        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_PAGADO, STATE_CANCELADO],
-        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO, STATE_PENDIENTE],
-        STATE_PAGADO: [STATE_EN_PREP, STATE_CANCELADO],
-        STATE_EN_PREP: [STATE_EN_CAMINO, STATE_CONFIRMADO],
-        STATE_EN_CAMINO: [STATE_ENTREGADO, STATE_EN_PREP],
+        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_CANCELADO],
+        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO],
+        STATE_EN_PREP: [STATE_ENTREGADO, STATE_CANCELADO],
         STATE_ENTREGADO: [],
-        STATE_CANCELADO: [STATE_PENDIENTE],
+        STATE_CANCELADO: [],
     }
 
     TRANSICIONES_STOCK = {
-        (STATE_CONFIRMADO, STATE_PENDIENTE): "restore",
         (STATE_CONFIRMADO, STATE_CANCELADO): "restore",
-        (STATE_PAGADO, STATE_CANCELADO): "restore",
-        (STATE_CANCELADO, STATE_PENDIENTE): "reopen",
+        (STATE_EN_PREP, STATE_CANCELADO): "restore",
     }
+
+    def _aplicar_stock(
+        self, uow: PedidoUnitOfWork, producto_id: int, cantidad: int, multiplicador: int = 1
+    ) -> None:
+        """
+        Aplica cambio de stock a un producto.
+        multiplicador=1: deducir (restar)
+        multiplicador=-1: restaurar (sumar)
+
+        Soporta:
+        - Modo manual: descuenta de producto.stock_manual
+        - Modo derivado (con ingredientes): descuenta proporcional de cada ingrediente
+        """
+        producto = uow.productos.get_by_id(producto_id)
+        if not producto:
+            return
+
+        if producto.stock_manual is not None:
+            producto.stock_manual -= multiplicador * cantidad
+            uow.productos.add(producto)
+        else:
+            ingredientes = list(producto.productos_ingredientes)
+            if ingredientes:
+                for pi in ingredientes:
+                    ing = pi.ingrediente
+                    if ing and ing.stock_actual > 0:
+                        delta = float(pi.cantidad) * cantidad * multiplicador
+                        ing.stock_actual = max(0, ing.stock_actual - delta)
+                        uow._session.add(ing)
 
     EVENTOS_WS = {
         STATE_PENDIENTE: "PEDIDO_CREADO",
         STATE_CONFIRMADO: "PEDIDO_CONFIRMADO",
-        STATE_PAGADO: "PEDIDO_PAGADO",
         STATE_EN_PREP: "PEDIDO_EN_PREP",
-        STATE_EN_CAMINO: "PEDIDO_EN_CAMINO",
         STATE_ENTREGADO: "PEDIDO_ENTREGADO",
         STATE_CANCELADO: "PEDIDO_CANCELADO",
     }
@@ -133,8 +154,7 @@ class PedidoService:
                         detail=f"Producto {producto.nombre} no disponible",
                     )
 
-                if producto.usa_stock_manual:
-                    if producto.stock_manual is None or producto.stock_manual < detalle_data.cantidad:
+                if producto.stock_manual is not None and producto.stock_manual < detalle_data.cantidad:
                         raise HTTPException(
                             status_code=status.HTTP_400_BAD_REQUEST,
                             detail=f"Stock insuficiente para {producto.nombre}",
@@ -199,9 +219,12 @@ class PedidoService:
     # CONFIRMAR PEDIDO
     # ========================================================================
 
-    async def confirmar_pedido(self, usuario_id: int, pedido_id: int) -> ConfirmarPedidoResponse:
+    async def confirmar_pedido(self, usuario_id: int, pedido_id: int, forma_pago_codigo: str | None = None) -> ConfirmarPedidoResponse:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id)
+
+            if forma_pago_codigo:
+                pedido.forma_pago_codigo = forma_pago_codigo
 
             if pedido.estado_codigo != STATE_PENDIENTE:
                 raise HTTPException(
@@ -217,10 +240,7 @@ class PedidoService:
 
             detalles = uow.detalles.get_by_pedido_id(pedido_id)
             for detalle in detalles:
-                producto = uow.productos.get_by_id(detalle.producto_id)
-                if producto and producto.usa_stock_manual and producto.stock_manual is not None:
-                    producto.stock_manual -= detalle.cantidad
-                    uow.productos.add(producto)
+                self._aplicar_stock(uow, detalle.producto_id, detalle.cantidad, multiplicador=1)
 
             pedido_anterior_codigo = pedido.estado_codigo
             pedido.estado_codigo = STATE_CONFIRMADO
@@ -262,19 +282,28 @@ class PedidoService:
         with PedidoUnitOfWork(self._session) as uow:
             pedido = self._get_pedido_seguro(uow, usuario_id, pedido_id, roles)
 
-            if pedido.estado_codigo not in [STATE_PENDIENTE, STATE_CONFIRMADO, STATE_PAGADO]:
+            is_client = not self._can_manage_all(roles)
+
+            if is_client and pedido.estado_codigo != STATE_PENDIENTE:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Solo puedes cancelar pedidos en estado PENDIENTE",
+                )
+
+            estados_cancelables = [STATE_PENDIENTE, STATE_CONFIRMADO]
+            if self._can_manage_all(roles):
+                estados_cancelables.append(STATE_EN_PREP)
+
+            if pedido.estado_codigo not in estados_cancelables:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
                 )
 
-            if pedido.estado_codigo in [STATE_CONFIRMADO, STATE_PAGADO]:
+            if pedido.estado_codigo in [STATE_CONFIRMADO, STATE_EN_PREP]:
                 detalles = uow.detalles.get_by_pedido_id(pedido_id)
                 for detalle in detalles:
-                    producto = uow.productos.get_by_id(detalle.producto_id)
-                    if producto and producto.usa_stock_manual and producto.stock_manual is not None:
-                        producto.stock_manual += detalle.cantidad
-                        uow.productos.add(producto)
+                    self._aplicar_stock(uow, detalle.producto_id, detalle.cantidad, multiplicador=-1)
 
             pedido_anterior_codigo = pedido.estado_codigo
             pedido.estado_codigo = STATE_CANCELADO
@@ -333,10 +362,7 @@ class PedidoService:
             if accion_stock == "restore":
                 detalles = uow.detalles.get_by_pedido_id(pedido_id)
                 for detalle in detalles:
-                    producto = uow.productos.get_by_id(detalle.producto_id)
-                    if producto and producto.usa_stock_manual and producto.stock_manual is not None:
-                        producto.stock_manual += detalle.cantidad
-                        uow.productos.add(producto)
+                    self._aplicar_stock(uow, detalle.producto_id, detalle.cantidad, multiplicador=-1)
 
             pedido_anterior_codigo = pedido.estado_codigo
             pedido.estado_codigo = estado_destino_codigo
@@ -374,12 +400,23 @@ class PedidoService:
         offset: int = 0,
         limit: int = 20,
         roles: list[str] | None = None,
+        estado: str | None = None,
+        forma_pago: str | None = None,
+        fecha_desde: datetime | None = None,
+        fecha_hasta: datetime | None = None,
     ) -> PedidoList:
         roles = roles or []
         with PedidoUnitOfWork(self._session) as uow:
             if self._can_manage_all(roles):
-                pedidos = uow.pedidos.get_all(offset=offset, limit=limit)
-                total = uow.pedidos.count_all()
+                pedidos = uow.pedidos.get_all_filtered(
+                    offset=offset, limit=limit,
+                    estado=estado, forma_pago=forma_pago,
+                    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+                )
+                total = uow.pedidos.count_all_filtered(
+                    estado=estado, forma_pago=forma_pago,
+                    fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
+                )
             else:
                 pedidos = uow.pedidos.get_by_usuario_id(usuario_id, offset=offset, limit=limit)
                 total = uow.pedidos.count_by_usuario(usuario_id)

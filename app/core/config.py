@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     COOKIE_SECURE: bool = False
-    rate_limit_default_burst: int = 10
-    rate_limit_default_per_minute: int = 60
+    rate_limit_default_burst: int = 30
+    rate_limit_default_per_minute: int = 120
     rate_limit_auth_burst: int = 5
     rate_limit_auth_per_minute: int = 5
     COOKIE_SAMESITE: str = "lax"
@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # MercadoPago (nombres anteriores, compatibilidad)
     MERCADOPAGO_ACCESS_TOKEN: str = ""
     MERCADOPAGO_PUBLIC_KEY: str = ""
+
+    # Cloudinary
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
 
     # URLs para frontend y webhooks
     VITE_FRONTEND_URL: str = "http://localhost:5500"

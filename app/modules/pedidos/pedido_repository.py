@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Optional
+
 from sqlmodel import Session, func, select
 
 from app.core.repository import BaseRepository
@@ -60,6 +63,54 @@ class PedidoRepository(BaseRepository[Pedido]):
         statement = select(func.count()).select_from(Pedido).where(
             Pedido.deleted_at.is_(None),
         )
+        return self.session.exec(statement).one()
+
+    def get_all_filtered(
+        self,
+        offset: int = 0,
+        limit: int = 20,
+        estado: str | None = None,
+        forma_pago: str | None = None,
+        fecha_desde: datetime | None = None,
+        fecha_hasta: datetime | None = None,
+    ) -> list[Pedido]:
+        """Obtener todos los pedidos con filtros opcionales."""
+        statement = (
+            select(Pedido)
+            .where(Pedido.deleted_at.is_(None))
+            .order_by(Pedido.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        if estado:
+            statement = statement.where(Pedido.estado_codigo == estado)
+        if forma_pago:
+            statement = statement.where(Pedido.forma_pago_codigo == forma_pago)
+        if fecha_desde:
+            statement = statement.where(Pedido.created_at >= fecha_desde)
+        if fecha_hasta:
+            statement = statement.where(Pedido.created_at <= fecha_hasta)
+        return self.session.exec(statement).all()
+
+    def count_all_filtered(
+        self,
+        estado: str | None = None,
+        forma_pago: str | None = None,
+        fecha_desde: datetime | None = None,
+        fecha_hasta: datetime | None = None,
+    ) -> int:
+        """Contar todos los pedidos con filtros opcionales."""
+        statement = select(func.count()).select_from(Pedido).where(
+            Pedido.deleted_at.is_(None),
+        )
+        if estado:
+            statement = statement.where(Pedido.estado_codigo == estado)
+        if forma_pago:
+            statement = statement.where(Pedido.forma_pago_codigo == forma_pago)
+        if fecha_desde:
+            statement = statement.where(Pedido.created_at >= fecha_desde)
+        if fecha_hasta:
+            statement = statement.where(Pedido.created_at <= fecha_hasta)
         return self.session.exec(statement).one()
 
     def get_by_id_no_deleted(self, pedido_id: int, usuario_id: int | None = None) -> Pedido | None:

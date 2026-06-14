@@ -27,6 +27,7 @@ import { OperacionPedidoDetailPage } from "./pages/OperacionPedidoDetailPage";
 import { OperacionesPedidosPage } from "./pages/OperacionesPedidosPage";
 import { ProductosInternosPage } from "./pages/ProductosInternosPage";
 import { VentaDetailPage } from "./pages/VentaDetailPage";
+
 import { ClientePedidoDetailPage } from "./pages/ClientePedidoDetailPage";
 
 interface DashboardLayoutProps {
@@ -97,7 +98,7 @@ export function App(): JSX.Element {
         <Route
           path="/ingredientes"
           element={
-            <ProtectedRoute requiredRoles={["ADMIN"]}>
+            <ProtectedRoute requiredRoles={["ADMIN", "STOCK"]}>
               <DashboardLayout>
                 <IngredientesPage />
               </DashboardLayout>
@@ -108,7 +109,7 @@ export function App(): JSX.Element {
         <Route
           path="/ingrediente/:ingredienteId"
           element={
-            <ProtectedRoute requiredRoles={["ADMIN"]}>
+            <ProtectedRoute requiredRoles={["ADMIN", "STOCK"]}>
               <DashboardLayout>
                 <IngredientDetailPage />
               </DashboardLayout>
@@ -194,15 +195,13 @@ export function App(): JSX.Element {
           }
         />
 
-        {/* RUTAS COMUNES (Admin + Stock + Pedidos + Cliente) */}
+        {/* RUTAS COMUNES (públicas y autenticadas) */}
         <Route
           path="/productos"
           element={
-            <ProtectedRoute>
-              <DashboardLayout>
-                {isAdmin ? <ProductosPage /> : isStock || isPedidos ? <ProductosInternosPage /> : <ProductosClientePage />}
-              </DashboardLayout>
-            </ProtectedRoute>
+            <DashboardLayout>
+              {isAdmin || isStock ? <ProductosPage /> : isPedidos ? <ProductosInternosPage /> : <ProductosClientePage />}
+            </DashboardLayout>
           }
         />
 
@@ -228,15 +227,13 @@ export function App(): JSX.Element {
           }
         />
 
-        {/* RUTAS CLIENTE */}
+        {/* RUTAS CLIENTE / CARRITO */}
         <Route
           path="/carrito"
           element={
-            <ProtectedRoute requiredRoles={["CLIENT"]}>
-              <DashboardLayout>
-                <CarritoPage />
-              </DashboardLayout>
-            </ProtectedRoute>
+            <DashboardLayout>
+              <CarritoPage />
+            </DashboardLayout>
           }
         />
 

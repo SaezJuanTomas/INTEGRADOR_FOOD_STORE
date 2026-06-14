@@ -54,6 +54,17 @@ def list_productos(
     )
 
 
+@router.get("/public", response_model=ProductoList)
+def list_productos_public(
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    categoria_id: int | None = Query(default=None, ge=1),
+    q: str | None = Query(default=None, min_length=1),
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoList:
+    return svc.get_public(offset=offset, limit=limit, categoria_id=categoria_id, q=q)
+
+
 @router.get("/{producto_id}", response_model=ProductoPublic)
 def get_producto(
     producto_id: int,

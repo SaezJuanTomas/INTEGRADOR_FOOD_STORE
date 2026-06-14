@@ -11,6 +11,7 @@ interface PaymentButtonProps {
 export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paid, setPaid] = useState(false)
 
   const mpConfigured = !!VITE_MP_PUBLIC_KEY
 
@@ -31,9 +32,10 @@ export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
       const { init_point } = res.data
 
       if (init_point) {
-        window.location.href = init_point
+        window.open(init_point, '_blank', 'noopener,noreferrer')
+        setPaid(true)
       } else {
-        setError('Error al obtener el punto de pago')
+        setError('Error al obtener el link de pago')
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail || 'Error al iniciar el pago'
@@ -41,6 +43,22 @@ export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (paid) {
+    return (
+      <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-center">
+        <p className="text-sm text-blue-800">
+          MercadoPago se abrió en una nueva pestaña. Completá el pago allí y volvé a esta página.
+        </p>
+        <a
+          href="/home"
+          className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          Volver al inicio
+        </a>
+      </div>
+    )
   }
 
   return (
@@ -62,7 +80,7 @@ export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            Conectando con MercadoPago...
+            Abriendo MercadoPago...
           </span>
         ) : (
           `Pagar $${monto.toFixed(2)} con MercadoPago`

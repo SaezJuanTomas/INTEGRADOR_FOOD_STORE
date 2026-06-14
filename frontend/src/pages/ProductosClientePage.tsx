@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import type { Categoria } from "../models/Categoria";
 import type { Producto } from "../models/Producto";
-import { categoriaService, productoService } from "../services/api";
+import { categoriaService, getProductosPublic } from "../services/api";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("es-AR", {
@@ -15,8 +15,8 @@ function formatCurrency(value: number): string {
 }
 
 function getImageUrl(producto: Producto): string {
-  if (producto.imagenes_url && producto.imagenes_url.trim().length > 0) {
-    return producto.imagenes_url;
+  if (producto.imagenes_url && producto.imagenes_url.length > 0 && producto.imagenes_url[0]) {
+    return producto.imagenes_url[0];
   }
 
   return "https://images.unsplash.com/photo-1543332164-6e82f355badc?auto=format&fit=crop&w=800&q=80";
@@ -30,7 +30,7 @@ export function ProductosClientePage(): JSX.Element {
 
   const productosQuery = useQuery({
     queryKey: ["productos", "cliente-catalogo"],
-    queryFn: () => productoService.getAll(0, 100, false),
+    queryFn: () => getProductosPublic(0, 100),
   });
 
   const categoriasQuery = useQuery({
@@ -177,7 +177,7 @@ export function ProductosClientePage(): JSX.Element {
                         nombre: producto.nombre,
                         precio: Number(producto.precio_base),
                         cantidad: 1,
-                        imagen: producto.imagenes_url ?? undefined,
+                        imagen: producto.imagenes_url?.[0] ?? undefined,
                       });
                       window.alert("Producto agregado al carrito");
                     }}

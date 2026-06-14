@@ -1,5 +1,8 @@
 """Pedidos Router: gestión de pedidos y updates en vivo por websocket."""
 
+from datetime import datetime
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from sqlmodel import Session
 
@@ -15,6 +18,7 @@ from app.modules.pedidos.schemas import (
     PedidoPublic,
     PedidoDetail,
     PedidoList,
+    ConfirmarPedidoInput,
     ConfirmarPedidoResponse,
     HistorialEstadoPedidoList,
     CambiarEstadoPedidoRequest,
@@ -70,25 +74,34 @@ def crear_pedido(
 def list_pedidos(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
+    estado: Optional[str] = Query(default=None, description="Filtrar por estado (PENDIENTE, CONFIRMADO, EN_PREP, ENTREGADO, CANCELADO)"),
+    forma_pago: Optional[str] = Query(default=None, alias="forma_pago", description="Filtrar por forma de pago (EFECTIVO, MERCADOPAGO, TRANSFERENCIA)"),
+    fecha_desde: Optional[datetime] = Query(default=None, alias="fecha_desde", description="Filtrar desde fecha (ISO 8601)"),
+    fecha_hasta: Optional[datetime] = Query(default=None, alias="fecha_hasta", description="Filtrar hasta fecha (ISO 8601)"),
     current_user: CurrentUser = Depends(get_current_active_user),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoList:
     """
-    Listar pedidos del usuario autenticado.
-    
-    Requiere token JWT válido.
-    
-    Parámetros:
-    - **offset**: Número de registros a saltar (default: 0)
-    - **limit**: Número máximo de registros (default: 20, max: 100)
-    
-    Los pedidos se retornan ordenados por fecha más reciente primero.
+    Listar pedidos.
+
+    - ADMIN/PEDIDOS: devuelve todos los pedidos (con filtros opcionales).
+    - CLIENT: devuelve solo los del usuario autenticado (filtros ignorados).
+
+    Filtros (solo ADMIN/PEDIDOS):
+    - **estado**: filtrar por estado del pedido
+    - **forma_pago**: filtrar por forma de pago
+    - **fecha_desde**: filtrar desde fecha (ISO 8601)
+    - **fecha_hasta**: filtrar hasta fecha (ISO 8601)
     """
     return svc.list_pedidos(
         current_user.id,
         offset=offset,
         limit=limit,
         roles=current_user.roles,
+        estado=estado,
+        forma_pago=forma_pago,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
     )
 
 
@@ -123,7 +136,8 @@ def get_pedido(
 @router.patch("/{pedido_id}/confirmar", response_model=ConfirmarPedidoResponse)
 async def confirmar_pedido(
     pedido_id: int,
-    current_user: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_PEDIDOS])),
+    data: ConfirmarPedidoInput,
+    current_user: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_PEDIDOS, ROLE_CLIENT])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> ConfirmarPedidoResponse:
     """
@@ -140,14 +154,14 @@ async def confirmar_pedido(
     Parámetros:
     - **pedido_id**: ID del pedido
     """
-    return await svc.confirmar_pedido(current_user.id, pedido_id)
+    return await svc.confirmar_pedido(current_user.id, pedido_id, data.forma_pago_codigo)
 
 
 @router.patch("/{pedido_id}/cancelar", response_model=PedidoDetail)
 async def cancelar_pedido(
     pedido_id: int,
     motivo: str | None = Query(default=None, max_length=500),
-    current_user: CurrentUser = Depends(require_roles([ROLE_CLIENT, ROLE_ADMIN])),
+    current_user: CurrentUser = Depends(require_roles([ROLE_CLIENT, ROLE_ADMIN, ROLE_PEDIDOS])),
     svc: PedidoService = Depends(get_pedido_service),
 ) -> PedidoDetail:
     """
@@ -186,15 +200,14 @@ async def cambiar_estado_pedido(
     
     Transiciones permitidas:
     - PENDIENTE → CONFIRMADO, CANCELADO
-    - CONFIRMADO → PREPARANDO, CANCELADO
-    - PREPARANDO → EN_CAMINO
-    - EN_CAMINO → ENTREGADO
+    - CONFIRMADO → EN_PREP, CANCELADO
+    - EN_PREP → ENTREGADO, CANCELADO
     - ENTREGADO → (ninguno)
     - CANCELADO → (ninguno)
     
     Parámetros:
     - **pedido_id**: ID del pedido
-    - **estado_codigo**: Nuevo estado (e.g., PREPARANDO, EN_CAMINO, ENTREGADO)
+    - **estado_codigo**: Nuevo estado (e.g., CONFIRMADO, EN_PREP, ENTREGADO)
     - **motivo**: Razón del cambio (opcional)
     """
     return await svc.cambiar_estado(current_user.id, pedido_id, data)

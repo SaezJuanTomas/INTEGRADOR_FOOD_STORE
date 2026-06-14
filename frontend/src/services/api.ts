@@ -269,6 +269,18 @@ export const categoriaService = buildCrudService<Categoria, CategoriaCreate, Cat
 export const productoService = buildCrudService<Producto, ProductoCreate, ProductoUpdate>("/productos");
 export const ingredienteService = buildCrudService<Ingrediente, IngredienteCreate, IngredienteUpdate>("/ingredientes");
 
+export function getProductosPublic(
+  offset = 0,
+  limit = 50,
+  categoria_id?: number,
+  q?: string
+): Promise<ListResponse<Producto>> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (categoria_id !== undefined) params.append("categoria_id", String(categoria_id));
+  if (q) params.append("q", q);
+  return request<ListResponse<Producto>>(`/productos/public?${params.toString()}`);
+}
+
 export interface RegisterPayload {
   nombre: string;
   apellido: string;
@@ -384,8 +396,25 @@ export function cambiarEstadoPedido(pedidoId: number, estado_codigo: string, mot
   });
 }
 
-export function listPedidos(offset = 0, limit = 50): Promise<ListResponse<PedidoPublic>> {
-  return request<ListResponse<PedidoPublic>>(`/pedidos?offset=${offset}&limit=${limit}`);
+export interface PedidosFilter {
+  offset?: number;
+  limit?: number;
+  estado?: string;
+  forma_pago?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+}
+
+export function listPedidos(offset = 0, limit = 50, filter?: PedidosFilter): Promise<ListResponse<PedidoPublic>> {
+  const params = new URLSearchParams({
+    offset: String(offset),
+    limit: String(limit),
+  });
+  if (filter?.estado) params.append("estado", filter.estado);
+  if (filter?.forma_pago) params.append("forma_pago", filter.forma_pago);
+  if (filter?.fecha_desde) params.append("fecha_desde", filter.fecha_desde);
+  if (filter?.fecha_hasta) params.append("fecha_hasta", filter.fecha_hasta);
+  return request<ListResponse<PedidoPublic>>(`/pedidos?${params.toString()}`);
 }
 
 export function getPedidosWebSocketUrl(): string {
@@ -531,6 +560,77 @@ export function manualAprobarPago(payload: ManualAprobarPayload): Promise<Confir
     method: "POST",
     data: payload,
   });
+}
+
+// ============================================================================
+// ESTADISTICAS (Charts / Dashboard)
+// ============================================================================
+
+export interface ResumenResponse {
+  total_pedidos: number
+  pedidos_hoy: number
+  ingresos_totales: number
+  ingresos_hoy: number
+  ticket_promedio: number
+  productos_vendidos: number
+}
+
+export interface VentaItem {
+  fecha: string
+  total: number
+  pedidos: number
+}
+
+export interface VentasResponse {
+  data: VentaItem[]
+}
+
+export interface ProductoTopItem {
+  producto_id: number
+  nombre: string
+  cantidad_vendida: number
+  total_generado: number
+}
+
+export interface ProductosTopResponse {
+  data: ProductoTopItem[]
+}
+
+export interface PedidosPorEstadoItem {
+  estado: string
+  cantidad: number
+  porcentaje: number
+}
+
+export interface PedidosPorEstadoResponse {
+  data: PedidosPorEstadoItem[]
+}
+
+export interface IngresosResponse {
+  total_ingresos: number
+  ingresos_mes_actual: number
+  ingresos_mes_anterior: number
+  variacion_porcentual: number | null
+}
+
+export function getResumen(): Promise<ResumenResponse> {
+  return request<ResumenResponse>("/api/v1/estadisticas/resumen");
+}
+
+export function getVentas(): Promise<VentasResponse> {
+  return request<VentasResponse>("/api/v1/estadisticas/ventas");
+}
+
+export function getProductosTop(limit = 10): Promise<ProductosTopResponse> {
+  return request<ProductosTopResponse>(`/api/v1/estadisticas/productos-top?limit=${limit}`);
+}
+
+export function getPedidosPorEstado(): Promise<PedidosPorEstadoResponse> {
+  return request<PedidosPorEstadoResponse>("/api/v1/estadisticas/pedidos-por-estado");
+}
+
+export function getIngresos(): Promise<IngresosResponse> {
+  return request<IngresosResponse>("/api/v1/estadisticas/ingresos");
 }
 
 export type { ListResponse };

@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "../context/AuthContext";
 import { categoriaService, ingredienteService, productoService } from "../services/api";
 
 function formatMoney(value: number): string {
@@ -20,6 +21,13 @@ function formatQuantity(value: number): string {
 export function ProductDetailPage(): JSX.Element {
   const params = useParams();
   const productoId = Number(params.productoId);
+  const { isAdmin, isStock } = useAuth();
+  const queryClient = useQueryClient();
+
+  const [imagenUrls, setImagenUrls] = useState<string[]>([]);
+  const [nuevaImagenUrl, setNuevaImagenUrl] = useState("");
+  const [editandoImagen, setEditandoImagen] = useState(false);
+  const [guardandoImagen, setGuardandoImagen] = useState(false);
 
   const productoQuery = useQuery({
     queryKey: ["productos", productoId],
@@ -50,6 +58,34 @@ export function ProductDetailPage(): JSX.Element {
   const cantidadIngredientes = producto?.ingredientes.length ?? 0;
   const margenBase = producto ? producto.margen_estimado : 0;
 
+  const handleGuardarImagen = async (): Promise<void> => {
+    if (!producto) return;
+    setGuardandoImagen(true);
+    try {
+      const urls = imagenUrls.filter(Boolean);
+      await productoService.update(producto.id, { imagenes_url: urls.length > 0 ? urls : null });
+      queryClient.invalidateQueries({ queryKey: ["productos", productoId] });
+      setEditandoImagen(false);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Error al guardar la imagen";
+      alert(msg);
+    } finally {
+      setGuardandoImagen(false);
+    }
+  };
+
+  const handleAgregarImagenUrl = (): void => {
+    const trimmed = nuevaImagenUrl.trim();
+    if (trimmed && !imagenUrls.includes(trimmed)) {
+      setImagenUrls([...imagenUrls, trimmed]);
+      setNuevaImagenUrl("");
+    }
+  };
+
+  const handleEliminarImagenUrl = (index: number): void => {
+    setImagenUrls(imagenUrls.filter((_, i) => i !== index));
+  };
+
   return (
     <section className="rounded-3xl border border-orange-100 bg-white/90 p-5 shadow-sm backdrop-blur">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -70,6 +106,101 @@ export function ProductDetailPage(): JSX.Element {
         <p className="rounded-xl bg-red-100 px-4 py-3 text-sm text-red-700">
           No se pudo cargar el producto.
         </p>
+      ) : null}
+
+      {producto && producto.imagenes_url && producto.imagenes_url.length > 0 ? (
+        <div className="mb-5 grid grid-cols-2 gap-3 overflow-hidden rounded-2xl">
+          {producto.imagenes_url.slice(0, 4).map((url, i) => (
+            <div key={i} className="overflow-hidden rounded-xl border border-orange-100">
+              <img
+                src={url}
+                alt={`${producto.nombre} ${i + 1}`}
+                className="h-40 w-full object-cover"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {(isAdmin || isStock) && producto ? (
+        <div className="mb-5 rounded-2xl border border-orange-100 bg-white p-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-orange-900">Imágenes del producto</h3>
+            {!editandoImagen ? (
+              <button
+                type="button"
+                onClick={() => { setImagenUrls(producto.imagenes_url ?? []); setEditandoImagen(true); }}
+                className="rounded bg-orange-500 px-3 py-1 text-xs font-medium text-white hover:bg-orange-600"
+              >
+                Editar imágenes
+              </button>
+            ) : null}
+          </div>
+          {editandoImagen ? (
+            <div className="mt-3 space-y-3">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={nuevaImagenUrl}
+                  onChange={(e) => setNuevaImagenUrl(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAgregarImagenUrl(); } }}
+                  placeholder="URL de la imagen..."
+                  className="flex-1 rounded border border-orange-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleAgregarImagenUrl}
+                  className="rounded bg-orange-500 px-3 py-2 text-sm font-medium text-white hover:bg-orange-600"
+                >
+                  Agregar
+                </button>
+              </div>
+              {imagenUrls.length > 0 ? (
+                <div className="space-y-2">
+                  {imagenUrls.map((url, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg border border-orange-100 p-2">
+                      <img
+                        src={url}
+                        alt={`Imagen ${i + 1}`}
+                        className="h-12 w-12 flex-shrink-0 rounded object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                      <span className="flex-1 truncate text-xs text-slate-600">{url}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarImagenUrl(i)}
+                        className="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-200"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">Sin imágenes. Agregá URLs arriba.</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleGuardarImagen}
+                  disabled={guardandoImagen}
+                  className="rounded bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                >
+                  {guardandoImagen ? "Guardando..." : "Guardar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditandoImagen(false)}
+                  disabled={guardandoImagen}
+                  className="rounded border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-900 hover:bg-orange-100 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {producto ? (

@@ -4,7 +4,6 @@ import { loginRequest } from "../services/api";
 const TOKEN_KEY = "food_store_token";
 const USER_KEY = "food_store_user";
 const ROLES_KEY = "food_store_roles";
-const CART_KEY = "food_store_cart";
 
 export interface User {
   id: number;
@@ -88,7 +87,6 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(ROLES_KEY);
-    localStorage.removeItem(CART_KEY);
     setToken(null);
     setUser(null);
     setRoles([]);

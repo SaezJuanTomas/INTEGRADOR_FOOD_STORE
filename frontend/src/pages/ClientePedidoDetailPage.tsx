@@ -1,14 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
-import { useParams, Link } from "react-router-dom";
-import { getPedidoDetail, getHistorialPedido, getPagoByPedido } from "../services/api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { getPedidoDetail, getHistorialPedido, getPagoByPedido, cancelarPedido } from "../services/api";
 import type { HistorialEstadoPedidoPublic } from "../services/api";
 
 const stateLabels: Record<string, string> = {
   PENDIENTE: "Pendiente",
   CONFIRMADO: "Confirmado",
-  PAGADO: "Pagado",
   EN_PREP: "Preparando",
-  EN_CAMINO: "En camino",
   ENTREGADO: "Entregado",
   CANCELADO: "Cancelado",
 };
@@ -16,9 +14,7 @@ const stateLabels: Record<string, string> = {
 const stateColors: Record<string, string> = {
   PENDIENTE: "bg-yellow-100 text-yellow-800",
   CONFIRMADO: "bg-blue-100 text-blue-800",
-  PAGADO: "bg-green-100 text-green-800",
   EN_PREP: "bg-purple-100 text-purple-800",
-  EN_CAMINO: "bg-orange-100 text-orange-800",
   ENTREGADO: "bg-green-100 text-green-800",
   CANCELADO: "bg-red-100 text-red-800",
 };
@@ -37,6 +33,18 @@ export function ClientePedidoDetailPage(): JSX.Element {
     queryKey: ["cliente-historial", pedidoId],
     queryFn: () => getHistorialPedido(pedidoId),
     enabled: !Number.isNaN(pedidoId),
+  });
+
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const cancelarMutation = useMutation({
+    mutationFn: () => cancelarPedido(pedidoId, "Cancelado por el cliente"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["cliente-pedido", pedidoId] });
+      queryClient.invalidateQueries({ queryKey: ["cliente-historial", pedidoId] });
+      navigate("/mis-pedidos");
+    },
   });
 
   const pagoQuery = useQuery({
@@ -92,6 +100,30 @@ export function ClientePedidoDetailPage(): JSX.Element {
           </dl>
         </div>
       </div>
+
+      {pedido.estado_codigo === "PENDIENTE" && (
+        <div className="rounded-xl border border-red-100 bg-red-50 p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-red-900">Cancelar pedido</h2>
+              <p className="mt-1 text-sm text-red-700">
+                Si cancelás este pedido, no se procesará y no se te cobrará nada.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (window.confirm("¿Estás seguro de cancelar este pedido?")) {
+                  cancelarMutation.mutate();
+                }
+              }}
+              disabled={cancelarMutation.isPending}
+              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+            >
+              {cancelarMutation.isPending ? "Cancelando..." : "Cancelar pedido"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {pago ? (
         <div className="rounded-xl border border-orange-100 bg-white p-6 shadow-sm">

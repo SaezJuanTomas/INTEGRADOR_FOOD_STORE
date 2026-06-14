@@ -20,7 +20,7 @@ class ProductoCreate(SQLModel):
     nombre: str = Field(min_length=2, max_length=150)
     descripcion: Optional[str] = None
     precio_base: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2)
-    imagenes_url: Optional[str] = None
+    imagenes_url: Optional[List[str]] = None
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0)
     disponible: bool = True
     usa_stock_manual: bool = False
@@ -34,7 +34,7 @@ class ProductoUpdate(SQLModel):
     nombre: Optional[str] = Field(default=None, min_length=2, max_length=150)
     descripcion: Optional[str] = None
     precio_base: Optional[Decimal] = Field(default=None, ge=0, max_digits=10, decimal_places=2)
-    imagenes_url: Optional[str] = None
+    imagenes_url: Optional[List[str]] = None
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0)
     disponible: Optional[bool] = None
     usa_stock_manual: Optional[bool] = None
@@ -49,7 +49,7 @@ class ProductoPublic(SQLModel):
     nombre: str
     descripcion: Optional[str] = None
     precio_base: Decimal
-    imagenes_url: Optional[str] = None
+    imagenes_url: Optional[List[str]] = None
     tiempo_prep_min: Optional[int] = None
     disponible: bool
     usa_stock_manual: bool

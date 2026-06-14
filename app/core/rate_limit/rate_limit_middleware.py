@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import Awaitable, Callable
 
@@ -7,6 +8,8 @@ from starlette.types import ASGIApp
 
 from app.core.config import settings
 from app.core.rate_limit.rate_limiter import RateLimiter
+
+logger = logging.getLogger(__name__)
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -60,13 +63,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             client_key = "ip:unknown"
 
         if not limiter.is_allowed(client_key):
-            seconds_until_next_token = int(1 / max(limiter.refill_rate, 0.001))
+            seconds_until_next_token = max(1, int(1 / max(limiter.refill_rate, 0.001)))
+            logger.warning(
+                "Rate limit exceeded | client=%s path=%s method=%s retry_after=%ds",
+                client_key, request.url.path, request.method, seconds_until_next_token,
+            )
+            request_id = request.headers.get("x-request-id", "")
             return Response(
                 content=(
                     '{"error":{'
                     '"code":"rate_limit_exceeded",'
                     '"message":"Demasiadas peticiones. Intenta de nuevo más tarde.",'
-                    f'"retry_after_seconds":{seconds_until_next_token}'
+                    f'"retry_after_seconds":{seconds_until_next_token},'
+                    f'"retry_after":{seconds_until_next_token},'
+                    f'"request_id":"{request_id}"'
                     '}}'
                 ),
                 status_code=429,

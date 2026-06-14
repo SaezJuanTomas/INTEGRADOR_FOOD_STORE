@@ -128,6 +128,11 @@ class CambiarEstadoPedidoRequest(SQLModel):
     motivo: Optional[str] = Field(default=None, max_length=500)
 
 
+class ConfirmarPedidoInput(SQLModel):
+    """Input para confirmar pedido"""
+    forma_pago_codigo: Optional[str] = Field(default=None, max_length=50)
+
+
 class ConfirmarPedidoResponse(SQLModel):
     """Response al confirmar pedido"""
     id: int

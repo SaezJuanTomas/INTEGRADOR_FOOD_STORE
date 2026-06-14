@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlmodel import Field, Relationship
+from sqlmodel import JSON, Column, Field, Relationship
 
 from app.core.base import BaseModel
 from app.models.producto_categoria import ProductoCategoria
@@ -21,7 +21,7 @@ class Producto(BaseModel, table=True):
     nombre: str = Field(max_length=150, index=True, nullable=False)
     descripcion: Optional[str] = Field(default=None, nullable=True)
     precio_base: Decimal = Field(default=0, ge=0, max_digits=10, decimal_places=2, nullable=False)
-    imagenes_url: Optional[str] = Field(default=None, nullable=True)
+    imagenes_url: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     tiempo_prep_min: Optional[int] = Field(default=None, ge=0, nullable=True)
     disponible: bool = Field(default=True, nullable=False)
     stock_cantidad: Optional[int] = Field(default=None, ge=0, nullable=True)

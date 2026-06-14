@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.core.rbac import STATE_PAGADO
+from app.core.rbac import STATE_CONFIRMADO
 from app.models.pago import Pago
 from app.models.pedido import Pedido
 from app.modules.payments.schemas import (
@@ -155,6 +155,9 @@ class PaymentService:
             )
             uow.pagos.add(pago)
 
+            pedido.forma_pago_codigo = "MERCADOPAGO"
+            self._session.add(pedido)
+
             return PagoCrearResponse(
                 pago_id=pago.id,
                 preference_id=mp_data["preference_id"],
@@ -250,7 +253,8 @@ class PaymentService:
                 if nuevo_estado == "aprobado":
                     pedido = self._session.get(Pedido, pago.pedido_id)
                     if pedido:
-                        pedido.estado_codigo = STATE_PAGADO
+                        pedido.estado_codigo = STATE_CONFIRMADO
+                        pedido.forma_pago_codigo = "MERCADOPAGO"
                         pedido.updated_at = datetime.now(timezone.utc)
                         self._session.add(pedido)
 
@@ -274,9 +278,21 @@ class PaymentService:
         detalles = detalle_repo.get_by_pedido_id(pedido_id)
         for detalle in detalles:
             producto = producto_repo.get_by_id(detalle.producto_id)
-            if producto and producto.usa_stock_manual and producto.stock_manual is not None:
+            if not producto:
+                continue
+
+            if producto.stock_manual is not None:
                 producto.stock_manual -= detalle.cantidad
                 producto_repo.add(producto)
+            else:
+                ingredientes = list(producto.productos_ingredientes)
+                if ingredientes:
+                    for pi in ingredientes:
+                        ing = pi.ingrediente
+                        if ing and ing.stock_actual > 0:
+                            delta = float(pi.cantidad) * detalle.cantidad
+                            ing.stock_actual = max(0, ing.stock_actual - delta)
+                            self._session.add(ing)
 
     def confirmar_pago(self, pedido_id: int,
                        payment_id: Optional[int] = None) -> PagoEstadoResponse:
@@ -329,7 +345,8 @@ class PaymentService:
                     uow.pagos.add(pago)
 
                     if nuevo_estado == "aprobado":
-                        pedido.estado_codigo = STATE_PAGADO
+                        pedido.estado_codigo = STATE_CONFIRMADO
+                        pedido.forma_pago_codigo = "MERCADOPAGO"
                         pedido.updated_at = datetime.now(timezone.utc)
                         self._session.add(pedido)
 
@@ -392,7 +409,7 @@ class PaymentService:
                 uow.pagos.add(pago)
 
             if nuevo_estado == "aprobado":
-                pedido.estado_codigo = STATE_PAGADO
+                pedido.estado_codigo = STATE_CONFIRMADO
                 pedido.updated_at = datetime.now(timezone.utc)
                 self._session.add(pedido)
                 self._descontar_stock(pedido.id)

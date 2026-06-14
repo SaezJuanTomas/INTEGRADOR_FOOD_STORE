@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function LoginPage(): JSX.Element {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, isAuthenticated } = useAuth();
 
   const [email, setEmail] = useState<string>("admin@test.com");
@@ -11,12 +12,14 @@ export function LoginPage(): JSX.Element {
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
+  const redirectTo = searchParams.get("redirect") || "/home";
+
   // Redirige si ya está autenticado
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/home", { replace: true });
+      navigate(redirectTo, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, redirectTo]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();

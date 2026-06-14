@@ -1,7 +1,0 @@
-fastapi[standard]
-uvicorn[standard]
-sqlmodel
-psycopg2-binary
-mercadopago
-pydantic-settings
-python-multipart

@@ -11,7 +11,7 @@ export interface Producto {
   nombre: string;
   descripcion: string | null;
   precio_base: number;
-  imagenes_url: string | null;
+  imagenes_url: string[] | null;
   tiempo_prep_min: number | null;
   disponible: boolean;
   usa_stock_manual: boolean;
@@ -32,7 +32,7 @@ export interface ProductoCreate {
   nombre: string;
   descripcion: string | null;
   precio_base: number;
-  imagenes_url: string | null;
+  imagenes_url: string[] | null;
   tiempo_prep_min: number | null;
   disponible: boolean;
   usa_stock_manual: boolean;
@@ -46,7 +46,7 @@ export interface ProductoUpdate {
   nombre?: string;
   descripcion?: string | null;
   precio_base?: number;
-  imagenes_url?: string | null;
+  imagenes_url?: string[] | null;
   tiempo_prep_min?: number | null;
   disponible?: boolean;
   usa_stock_manual?: boolean;
