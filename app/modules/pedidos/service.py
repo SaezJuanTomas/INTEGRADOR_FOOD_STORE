@@ -16,6 +16,7 @@ from app.core.rbac import (
     normalize_role,
     normalize_state,
 )
+from app.core.stock_utils import aplicar_stock
 from app.core.websocket import manager
 from app.models import (
     Pedido,
@@ -66,31 +67,7 @@ class PedidoService:
     def _aplicar_stock(
         self, uow: PedidoUnitOfWork, producto_id: int, cantidad: int, multiplicador: int = 1
     ) -> None:
-        """
-        Aplica cambio de stock a un producto.
-        multiplicador=1: deducir (restar)
-        multiplicador=-1: restaurar (sumar)
-
-        Soporta:
-        - Modo manual: descuenta de producto.stock_manual
-        - Modo derivado (con ingredientes): descuenta proporcional de cada ingrediente
-        """
-        producto = uow.productos.get_by_id(producto_id)
-        if not producto:
-            return
-
-        if producto.stock_manual is not None:
-            producto.stock_manual -= multiplicador * cantidad
-            uow.productos.add(producto)
-        else:
-            ingredientes = list(producto.productos_ingredientes)
-            if ingredientes:
-                for pi in ingredientes:
-                    ing = pi.ingrediente
-                    if ing and ing.stock_actual > 0:
-                        delta = float(pi.cantidad) * cantidad * multiplicador
-                        ing.stock_actual = max(0, ing.stock_actual - delta)
-                        uow._session.add(ing)
+        aplicar_stock(uow._session, producto_id, cantidad, multiplicador)
 
     EVENTOS_WS = {
         STATE_PENDIENTE: "PEDIDO_CREADO",

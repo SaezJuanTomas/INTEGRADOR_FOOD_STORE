@@ -1,4 +1,6 @@
-from pydantic import computed_field
+import warnings
+
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -41,6 +43,20 @@ class Settings(BaseSettings):
 
     @computed_field
     @property
+    def CORS_ORIGINS(self) -> list[str]:
+        return [
+            "http://127.0.0.1:5500",
+            "http://127.0.0.1:5501",
+            "http://localhost:5500",
+            "http://localhost:5501",
+            "http://127.0.0.1:3000",
+            "http://localhost:3000",
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+        ]
+
+    @computed_field
+    @property
     def DATABASE_URL(self) -> str:
         if self.ENVIRONMENT == "development":
             return "sqlite:///./food_store.db"
@@ -48,6 +64,17 @@ class Settings(BaseSettings):
             f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        if self.ENVIRONMENT != "development" and self.SECRET_KEY == "change_this_secret_key_for_production":
+            warnings.warn(
+                "SECRET_KEY no fue cambiada en modo producción. "
+                "Usá una clave segura en el archivo .env",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        return self
 
     model_config = {
         "env_file": ".env",

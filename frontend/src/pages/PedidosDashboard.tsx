@@ -7,6 +7,10 @@ export function PedidosDashboard(): JSX.Element {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <a href="/ventas" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-amber-50 to-amber-100 p-6 shadow-md transition hover:shadow-lg hover:border-amber-200">
+          <h2 className="mb-2 text-2xl font-bold text-amber-900">💰 Ventas</h2>
+          <p className="text-amber-800">Visualiza todas las ventas, historial de cambios y detalle completo.</p>
+        </a>
         <a href="/operaciones-pedidos" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-amber-50 to-amber-100 p-6 shadow-md transition hover:shadow-lg hover:border-amber-200">
           <h2 className="mb-2 text-2xl font-bold text-amber-900">🍳 Pedidos en vivo</h2>
           <p className="text-amber-800">Visualiza y gestiona pedidos entrantes, cambia estados y confirma órdenes.</p>

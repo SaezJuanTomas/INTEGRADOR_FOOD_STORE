@@ -30,7 +30,7 @@ def resumen(
 @router.get("/ventas", response_model=VentasResponse)
 def ventas(
     svc: EstadisticasService = Depends(get_stats_service),
-    _=Depends(require_roles(["ADMIN"])),
+    _=Depends(require_roles(["ADMIN", "PEDIDOS"])),
 ):
     return svc.ventas()
 
@@ -39,7 +39,7 @@ def ventas(
 def productos_top(
     limit: int = Query(default=10, ge=1, le=50),
     svc: EstadisticasService = Depends(get_stats_service),
-    _=Depends(require_roles(["ADMIN"])),
+    _=Depends(require_roles(["ADMIN", "PEDIDOS"])),
 ):
     return svc.productos_top(limit)
 
@@ -47,7 +47,7 @@ def productos_top(
 @router.get("/pedidos-por-estado", response_model=PedidosPorEstadoResponse)
 def pedidos_por_estado(
     svc: EstadisticasService = Depends(get_stats_service),
-    _=Depends(require_roles(["ADMIN"])),
+    _=Depends(require_roles(["ADMIN", "PEDIDOS"])),
 ):
     return svc.pedidos_por_estado()
 
@@ -55,6 +55,6 @@ def pedidos_por_estado(
 @router.get("/ingresos", response_model=IngresosResponse)
 def ingresos(
     svc: EstadisticasService = Depends(get_stats_service),
-    _=Depends(require_roles(["ADMIN"])),
+    _=Depends(require_roles(["ADMIN", "PEDIDOS"])),
 ):
     return svc.ingresos()

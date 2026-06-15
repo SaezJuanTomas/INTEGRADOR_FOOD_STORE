@@ -1,10 +1,14 @@
 import logging
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 from sqlmodel import Session
 
 from app.core.config import settings
 from app.core.database import get_session
+from app.core.deps import get_current_active_user, require_roles
+from app.modules.usuarios.schemas import CurrentUser
 from app.modules.payments.schemas import (
     CrearPagoRequest,
     ConfirmarPagoRequest,
@@ -26,11 +30,12 @@ def get_payment_service(session: Session = Depends(get_session)) -> PaymentServi
 
 @router.post("/crear", response_model=PagoCrearResponse)
 @router.post("/create-preference", response_model=PagoCrearResponse)
-def create_preference(
+async def create_preference(
     data: CrearPagoRequest,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     svc: PaymentService = Depends(get_payment_service),
 ):
-    return svc.crear_pago(data.pedido_id)
+    return await svc.crear_pago(data.pedido_id, current_user.id)
 
 
 @router.get("/{pedido_id}", response_model=PagoPublic)
@@ -42,11 +47,12 @@ def get_pago_by_pedido(
 
 
 @router.post("/manual-aprobar", response_model=PagoEstadoResponse)
-def manual_aprobar(
+async def manual_aprobar(
     data: ManualAprobarRequest,
+    _: CurrentUser = Depends(require_roles(["ADMIN", "PEDIDOS"])),
     svc: PaymentService = Depends(get_payment_service),
 ):
-    return svc.aprobar_manual(data)
+    return await svc.aprobar_manual(data)
 
 
 @router.post("/webhook")
@@ -60,25 +66,26 @@ async def webhook(
             data = await request.json()
         else:
             data = dict(await request.form())
-        return svc.procesar_webhook(data, query_params=query_params)
+        return await svc.procesar_webhook(data, query_params=query_params)
     except Exception as e:
         logger.exception("Error en webhook MP")
         return {"status": "error", "reason": str(e)}
 
 
 @router.post("/confirm", response_model=PagoEstadoResponse)
-def confirm_payment(
+async def confirm_payment(
     data: ConfirmarPagoRequest,
+    _: CurrentUser = Depends(require_roles(["ADMIN", "PEDIDOS"])),
     svc: PaymentService = Depends(get_payment_service),
 ):
-    return svc.confirmar_pago(data.pedido_id, data.payment_id)
+    return await svc.confirmar_pago(data.pedido_id, data.payment_id)
 
 
 @router.get("/redirect/{pedido_id}/{status}")
 async def redirect_after_pago(pedido_id: int, status: str, request: Request):
-    frontend_url = settings.VITE_FRONTEND_URL or "http://localhost:5173"
+    ngrok_url = settings.NGROK_URL or settings.VITE_FRONTEND_URL or "http://localhost:5173"
     qs = request.url.query
-    url = f"{frontend_url}/orders/{pedido_id}/{status}"
+    url = f"{ngrok_url}/orders/{pedido_id}/{status}"
     if qs:
         url += f"?{qs}"
     return RedirectResponse(url=url)

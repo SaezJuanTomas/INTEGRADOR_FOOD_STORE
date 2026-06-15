@@ -1,3 +1,15 @@
+"""
+Rate limiter basado en Token Bucket en memoria.
+
+ADVERTENCIA: Almacena los buckets en memoria local del proceso.
+Si la app se ejecuta con múltiples workers (gunicorn, uvicorn --workers N),
+cada worker tendrá sus propios buckets independientes, por lo que el límite
+se aplica por worker y no globalmente.
+
+Para entornos multi-worker/productivos, reemplazar el diccionario en memoria
+por un backend compartido como Redis (ej: usando redis-py + TokenBucket en Lua).
+"""
+
 import threading
 import time
 from dataclasses import dataclass, field

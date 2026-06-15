@@ -69,9 +69,17 @@ export default function PaymentPage() {
 
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-4">
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Resumen del Pedido #{order.id}
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Resumen del Pedido #{order.id}
+            </h2>
+            <Link
+              to="/productos"
+              className="text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Volver al catálogo
+            </Link>
+          </div>
 
           <div className="space-y-3">
             <div className="flex justify-between text-sm">

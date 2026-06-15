@@ -1,7 +1,6 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../services/api'
-
-const VITE_MP_PUBLIC_KEY = import.meta.env.VITE_MP_PUBLIC_KEY
 
 interface PaymentButtonProps {
   pedidoId: number
@@ -9,18 +8,12 @@ interface PaymentButtonProps {
 }
 
 export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [paid, setPaid] = useState(false)
-
-  const mpConfigured = !!VITE_MP_PUBLIC_KEY
 
   const handlePagar = async () => {
-    if (!mpConfigured) {
-      setError('MercadoPago no está configurado. Configure VITE_MP_PUBLIC_KEY en el .env.')
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -28,14 +21,12 @@ export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
       const res = await api.post('/api/v1/pagos/create-preference', {
         pedido_id: pedidoId,
       })
-
       const { init_point } = res.data
-
       if (init_point) {
         window.open(init_point, '_blank', 'noopener,noreferrer')
-        setPaid(true)
+        setSent(true)
       } else {
-        setError('Error al obtener el link de pago')
+        setError('No se pudo obtener el link de pago')
       }
     } catch (err: any) {
       const detail = err.response?.data?.detail || 'Error al iniciar el pago'
@@ -45,18 +36,18 @@ export function PaymentButton({ pedidoId, monto }: PaymentButtonProps) {
     }
   }
 
-  if (paid) {
+  if (sent) {
     return (
       <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-center">
         <p className="text-sm text-blue-800">
-          MercadoPago se abrió en una nueva pestaña. Completá el pago allí y volvé a esta página.
+          MercadoPago se abrió en una nueva pestaña
         </p>
-        <a
-          href="/home"
-          className="inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        <button
+          onClick={() => navigate('/productos')}
+          className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600"
         >
-          Volver al inicio
-        </a>
+          Volver al catálogo
+        </button>
       </div>
     )
   }

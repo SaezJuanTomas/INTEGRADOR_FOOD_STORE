@@ -1,42 +1,20 @@
 """Utilidades de seguridad centralizadas (bcrypt + JWT)."""
 
-import base64
-import hashlib
+import bcrypt
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
-
 
 def hash_password(password: str) -> str:
-    try:
-        return pwd_context.hash(password)
-    except Exception:
-        legacy_key = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode(),
-            b"secret_salt_food_store",
-            100000,
-        )
-        return base64.b64encode(legacy_key).decode()
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    try:
-        return pwd_context.verify(password, password_hash)
-    except Exception:
-        legacy_key = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode(),
-            b"secret_salt_food_store",
-            100000,
-        )
-        return base64.b64encode(legacy_key).decode() == password_hash
+    return bcrypt.checkpw(password.encode(), password_hash.encode())
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:

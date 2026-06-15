@@ -121,7 +121,7 @@ export function App(): JSX.Element {
         <Route
           path="/ventas"
           element={
-            <ProtectedRoute requiredRoles={["ADMIN"]}>
+            <ProtectedRoute requiredRoles={["ADMIN", "PEDIDOS"]}>
               <DashboardLayout>
                 <VentasPage />
               </DashboardLayout>
@@ -132,7 +132,7 @@ export function App(): JSX.Element {
         <Route
           path="/ventas/:id"
           element={
-            <ProtectedRoute requiredRoles={["ADMIN"]}>
+            <ProtectedRoute requiredRoles={["ADMIN", "PEDIDOS"]}>
               <DashboardLayout>
                 <VentaDetailPage />
               </DashboardLayout>

@@ -142,17 +142,47 @@ export function NavBar(): JSX.Element {
             )}
 
             {isStock && (
-              <NavLink
-                to="/stock"
-                className={({ isActive }) =>
-                  `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
-                }
-              >
-                📦 Stock
-              </NavLink>
+              <>
+                <NavLink
+                  to="/stock"
+                  className={({ isActive }) =>
+                    `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                  }
+                >
+                  📦 Stock
+                </NavLink>
+                <NavLink
+                  to="/ingredientes"
+                  className={({ isActive }) =>
+                    `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                  }
+                >
+                  🧂 Ingredientes
+                </NavLink>
+              </>
             )}
 
-            {(isAdmin || isPedidos) && (
+            {isPedidos && (
+              <>
+                <NavLink
+                  to="/ventas"
+                  className={({ isActive }) =>
+                    `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                  }
+                >
+                  💰 Ventas
+                </NavLink>
+                <NavLink
+                  to="/operaciones-pedidos"
+                  className={({ isActive }) =>
+                    `rounded px-3 py-2 text-sm ${isActive ? "bg-orange-500 text-white" : "bg-orange-100 text-orange-900 hover:bg-orange-200"}`
+                  }
+                >
+                  🍳 Pedidos en vivo
+                </NavLink>
+              </>
+            )}
+            {isAdmin && (
               <NavLink
                 to="/operaciones-pedidos"
                 className={({ isActive }) =>

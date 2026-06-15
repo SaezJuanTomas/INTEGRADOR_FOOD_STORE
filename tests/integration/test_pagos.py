@@ -1,6 +1,6 @@
 import os
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
 
@@ -42,17 +42,11 @@ class TestPagosFlow:
     ):
         pedido_id = _create_pedido(client, admin_auth_headers, cliente_auth_headers)
         from app.modules.payments.service import PaymentService
-        with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
-            with patch("mercadopago.SDK") as mock_sdk:
-                sdk_instance = mock_sdk.return_value
-                pref = sdk_instance.preference.return_value
-                pref.create.return_value = {
-                    "status": 201,
-                    "response": {
-                        "id": "pref_123",
-                        "init_point": "https://mercadopago.com/checkout/123",
-                    }
-                }
+        with patch.object(PaymentService, "_crear_preferencia_mp", new=AsyncMock(return_value={
+            "preference_id": "pref_123",
+            "init_point": "https://mercadopago.com/checkout/123",
+        })):
+            with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
                 response = client.post(
                     "/api/v1/pagos/create-preference",
                     headers=cliente_auth_headers,
@@ -68,17 +62,26 @@ class TestPagosFlow:
     ):
         pedido_id = _create_pedido(client, admin_auth_headers, cliente_auth_headers)
         from app.modules.payments.service import PaymentService
-        with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
-            with patch("mercadopago.SDK") as mock_sdk:
-                sdk_instance = mock_sdk.return_value
-                pref = sdk_instance.preference.return_value
-                pref.create.return_value = {"status": 400, "response": {"message": "invalid data"}}
+        with patch.object(PaymentService, "_crear_preferencia_mp", new=AsyncMock(side_effect=RuntimeError("MP error"))):
+            with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
                 response = client.post(
                     "/api/v1/pagos/create-preference",
                     headers=cliente_auth_headers,
                     json={"pedido_id": pedido_id},
                 )
         assert response.status_code == 400
+
+    def test_create_preference_wrong_owner(
+        self, client: TestClient, admin_auth_headers: dict, cliente_auth_headers: dict
+    ):
+        pedido_id = _create_pedido(client, admin_auth_headers, cliente_auth_headers)
+        response = client.post(
+            "/api/v1/pagos/create-preference",
+            headers=admin_auth_headers,
+            json={"pedido_id": pedido_id},
+        )
+        assert response.status_code == 403
+        assert "No puedes pagar un pedido que no te pertenece" in response.text
 
     def test_webhook_ignores_non_payment_topic(self, client: TestClient):
         response = client.post(
@@ -107,20 +110,24 @@ class TestPagosFlow:
         assert desde.json()["estado_codigo"] == "PENDIENTE"
 
         from app.modules.payments.service import PaymentService
-        with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
-            with patch("mercadopago.SDK") as mock_sdk:
-                sdk_instance = mock_sdk.return_value
-                pref = sdk_instance.preference.return_value
-                pref.create.return_value = {"status": 201, "response": {"id": "pref_abc", "init_point": "https://mp.com/abc"}}
-                client.post("/api/v1/pagos/create-preference", headers=cliente_auth_headers, json={"pedido_id": pedido_id})
+        with patch.object(PaymentService, "_crear_preferencia_mp", new=AsyncMock(return_value={
+            "preference_id": "pref_abc",
+            "init_point": "https://mp.com/abc",
+        })):
+            with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
+                client.post(
+                    "/api/v1/pagos/create-preference",
+                    headers=cliente_auth_headers,
+                    json={"pedido_id": pedido_id},
+                )
 
         from app.modules.payments.service import PaymentService
-        with patch.object(PaymentService, "_consultar_pago_mp", return_value={
+        with patch.object(PaymentService, "_consultar_pago_mp", new=AsyncMock(return_value={
             "mp_payment_id": 5000,
             "mp_status": "approved",
             "mp_status_detail": "accredited",
             "mp_merchant_order_id": 9000,
-        }):
+        })):
             with patch.object(PaymentService, "_get_mp_access_token", return_value="test_token"):
                 response = client.post(
                     "/api/v1/pagos/webhook",
@@ -137,22 +144,22 @@ class TestPagosFlow:
         assert "orders/1/success" in response.headers.get("location", "")
 
     def test_confirm_payment_pedido_not_found(
-        self, client: TestClient, cliente_auth_headers: dict
+        self, client: TestClient, admin_auth_headers: dict
     ):
         response = client.post(
             "/api/v1/pagos/confirm",
-            headers=cliente_auth_headers,
+            headers=admin_auth_headers,
             json={"pedido_id": 999999},
         )
         assert response.status_code == 404
 
     def test_confirm_payment_without_payment_id_returns_estado_null(
-        self, client: TestClient, admin_auth_headers: dict, cliente_auth_headers: dict
+        self, client: TestClient, admin_auth_headers: dict
     ):
-        pedido_id = _create_pedido(client, admin_auth_headers, cliente_auth_headers)
+        pedido_id = _create_pedido(client, admin_auth_headers, admin_auth_headers)
         response = client.post(
             "/api/v1/pagos/confirm",
-            headers=cliente_auth_headers,
+            headers=admin_auth_headers,
             json={"pedido_id": pedido_id},
         )
         assert response.status_code == 200
@@ -160,19 +167,19 @@ class TestPagosFlow:
         assert data["pedido_id"] == pedido_id
 
     def test_confirm_payment_with_payment_id_and_mock(
-        self, client: TestClient, admin_auth_headers: dict, cliente_auth_headers: dict
+        self, client: TestClient, admin_auth_headers: dict
     ):
-        pedido_id = _create_pedido(client, admin_auth_headers, cliente_auth_headers)
+        pedido_id = _create_pedido(client, admin_auth_headers, admin_auth_headers)
         from app.modules.payments.service import PaymentService
-        with patch.object(PaymentService, "_consultar_pago_mp", return_value={
+        with patch.object(PaymentService, "_consultar_pago_mp", new=AsyncMock(return_value={
             "mp_payment_id": 5001,
             "mp_status": "approved",
             "mp_status_detail": "accredited",
             "mp_merchant_order_id": 9001,
-        }):
+        })):
             response = client.post(
                 "/api/v1/pagos/confirm",
-                headers=cliente_auth_headers,
+                headers=admin_auth_headers,
                 json={"pedido_id": pedido_id, "payment_id": 5001},
             )
         assert response.status_code == 200
