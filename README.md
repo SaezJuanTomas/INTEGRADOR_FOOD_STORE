@@ -8,12 +8,7 @@ Aplicación web full-stack para la gestión integral de un negocio de comidas. P
 Link: https://drive.google.com/file/d/1fzJF0cm11zywa4ZlxdfpEEbAQq9e1n1D/view 
 
 # Integrantes:
-Juan Tomás Saez Ferreira
-Lucas Norton 
-Mateo De Martino
-Lorenzo Espetxe
-Gonzalo Sevilla 
-Gabriel Kogan
+Juan Tomás Saez Ferreira, Lucas Norton, Mateo De Martino, Lorenzo Espetxe, Gonzalo Sevilla, Gabriel Kogan.
 
 
 ## Stack Tecnológico
