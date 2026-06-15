@@ -310,6 +310,25 @@ class PaymentService:
                 if pago_local and pago_local.mp_payment_id:
                     resolved_payment_id = pago_local.mp_payment_id
 
+        if not resolved_payment_id:
+            try:
+                import mercadopago
+                access_token = self._get_mp_access_token()
+                if access_token:
+                    sdk = mercadopago.SDK(access_token)
+                    search_result = sdk.payment().search({
+                        "external_reference": str(pedido_id),
+                        "sort": "date_created",
+                        "criteria": "desc",
+                        "limit": 1,
+                    })
+                    if search_result.get("status") == 200:
+                        results = search_result.get("response", {}).get("results", [])
+                        if results:
+                            resolved_payment_id = results[0].get("id")
+            except Exception as e:
+                logger.warning("Error buscando pago MP por external_reference: %s", e)
+
         if resolved_payment_id:
             try:
                 mp_info = self._consultar_pago_mp(resolved_payment_id)

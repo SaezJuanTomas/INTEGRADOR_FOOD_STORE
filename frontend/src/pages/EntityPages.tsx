@@ -74,11 +74,9 @@ function formatARS(value: number): string {
 function ProductoFormExtra({
   form,
   setForm,
-  editingItem,
 }: {
   form: EntityForm;
   setForm: Dispatch<SetStateAction<EntityForm>>;
-  editingItem: Producto | null;
 }): JSX.Element {
   const categoriasQuery = useQuery({
     queryKey: ["categorias", "select"],
@@ -90,15 +88,12 @@ function ProductoFormExtra({
   const usaCostoCompraManual = Boolean(form.usa_costo_compra_manual);
 
   const ingredientesQuery = useQuery({
-    queryKey: ["ingredientes", "costos"],
+    queryKey: ["ingredientes", "options"],
     queryFn: () => ingredienteService.getAll(0, 100, false),
   });
   const ingredientesDisponibles = ingredientesQuery.data?.data ?? [];
 
   const precioSugerido = useMemo(() => {
-    if (editingItem?.precio_sugerido != null) {
-      return editingItem.precio_sugerido;
-    }
     let costo = 0;
     if (usaCostoCompraManual && typeof form.costo_compra_manual === "number") {
       costo = form.costo_compra_manual;
@@ -110,7 +105,7 @@ function ProductoFormExtra({
       }
     }
     return costo > 0 ? costo * 1.5 : null;
-  }, [editingItem, form, ingredientesDisponibles, usaCostoCompraManual, usaStockManual]);
+  }, [form, ingredientesDisponibles, usaCostoCompraManual, usaStockManual]);
 
   return (
     <>
@@ -333,9 +328,9 @@ function ProductoIngredientsEditor({
                   >
                     {ingredientesDisponibles
                       .filter((opcion) =>
-                        (ingredienteSearch[index] ?? "").trim() === ""
-                          ? true
-                          : opcion.nombre.toLowerCase().includes((ingredienteSearch[index] ?? "").toLowerCase())
+                        opcion.id === ingrediente.ingrediente_id ||
+                        (ingredienteSearch[index] ?? "").trim() === "" ||
+                        opcion.nombre.toLowerCase().includes((ingredienteSearch[index] ?? "").toLowerCase())
                       )
                       .map((opcion) => (
                         <option key={opcion.id} value={opcion.id}>
@@ -1121,8 +1116,8 @@ const productoConfig: EntityConfig<Producto, ProductoCreate, ProductoUpdate> = {
     categoria_id: (form.categoria_id as number | null) ?? null,
     ingredientes: (form.ingredientes as ProductoIngrediente[] | undefined) ?? [],
   }),
-  renderFormExtra: ({ form, setForm, editingItem }) => (
-    <ProductoFormExtra form={form} setForm={setForm} editingItem={editingItem as Producto | null} />
+  renderFormExtra: ({ form, setForm }) => (
+    <ProductoFormExtra form={form} setForm={setForm} />
   ),
 };
 

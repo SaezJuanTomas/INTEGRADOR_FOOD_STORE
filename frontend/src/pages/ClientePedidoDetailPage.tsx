@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { getPedidoDetail, getHistorialPedido, getPagoByPedido, cancelarPedido } from "../services/api";
 import type { HistorialEstadoPedidoPublic } from "../services/api";
+import { PaymentButton } from "../components/PaymentButton";
 
 const stateLabels: Record<string, string> = {
   PENDIENTE: "Pendiente",
@@ -100,6 +101,20 @@ export function ClientePedidoDetailPage(): JSX.Element {
           </dl>
         </div>
       </div>
+
+      {pedido.estado_codigo === "PENDIENTE" && (!pago || pago.estado === "pendiente") && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-6 shadow-sm">
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-blue-900">Pago pendiente</h2>
+              <p className="mt-1 text-sm text-blue-700">
+                Completá el pago con MercadoPago para confirmar tu pedido.
+              </p>
+            </div>
+            <PaymentButton pedidoId={pedido.id} monto={Number(pedido.total)} />
+          </div>
+        </div>
+      )}
 
       {pedido.estado_codigo === "PENDIENTE" && (
         <div className="rounded-xl border border-red-100 bg-red-50 p-6 shadow-sm">
