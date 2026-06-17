@@ -5,7 +5,7 @@ Aplicación web full-stack para la gestión integral de un negocio de comidas. P
 ---
 
 # 🍔 Video
-Link: https://drive.google.com/file/d/1fzJF0cm11zywa4ZlxdfpEEbAQq9e1n1D/view 
+Link: https://drive.google.com/file/d/1xhXvT1gB7uZow2GDkfbOObKJTsFHGE4_/view?usp=sharing
 
 # Integrantes:
 Juan Tomás Saez Ferreira, Lucas Norton, Mateo De Martino, Lorenzo Espetxe, Gonzalo Sevilla, Gabriel Kogan.
