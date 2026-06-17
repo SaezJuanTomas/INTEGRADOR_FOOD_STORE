@@ -75,17 +75,28 @@ async def webhook(
 @router.post("/confirm", response_model=PagoEstadoResponse)
 async def confirm_payment(
     data: ConfirmarPagoRequest,
-    _: CurrentUser = Depends(require_roles(["ADMIN", "PEDIDOS"])),
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
     svc: PaymentService = Depends(get_payment_service),
 ):
-    return await svc.confirmar_pago(data.pedido_id, data.payment_id)
+    """Confirmar/verificar pago. Puede ser llamado por el dueño del pedido o admin/pedidos."""
+    return await svc.confirmar_pago(data.pedido_id, data.payment_id, current_user)
+
+
+@router.get("/verify/{pedido_id}", response_model=PagoEstadoResponse)
+async def verify_payment(
+    pedido_id: int,
+    current_user: Annotated[CurrentUser, Depends(get_current_active_user)],
+    svc: PaymentService = Depends(get_payment_service),
+):
+    """Verificar el estado real del pago contra MercadoPago. Puede ser llamado por el cliente."""
+    return await svc.confirmar_pago(pedido_id, payment_id=None, current_user=current_user)
 
 
 @router.get("/redirect/{pedido_id}/{status}")
 async def redirect_after_pago(pedido_id: int, status: str, request: Request):
-    ngrok_url = settings.NGROK_URL or settings.VITE_FRONTEND_URL or "http://localhost:5173"
+    frontend_url = settings.VITE_FRONTEND_URL or "http://localhost:5500"
+    url = f"{frontend_url}/pedido/{pedido_id}?status={status}"
     qs = request.url.query
-    url = f"{ngrok_url}/orders/{pedido_id}/{status}"
-    if qs:
-        url += f"?{qs}"
+    if qs and "status=" not in qs:
+        url += f"&{qs}"
     return RedirectResponse(url=url)

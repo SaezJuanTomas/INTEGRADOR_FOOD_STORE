@@ -9,7 +9,7 @@ from fastapi import HTTPException, status
 from sqlmodel import Session
 
 from app.core.config import settings
-from app.core.rbac import STATE_CONFIRMADO
+from app.core.rbac import STATE_PAGADO, normalize_role, ROLE_ADMIN, ROLE_PEDIDOS
 from app.core.stock_utils import descontar_stock_pedido
 from app.models.pago import Pago
 from app.models.pedido import Pedido
@@ -20,6 +20,7 @@ from app.modules.payments.schemas import (
     ManualAprobarRequest,
 )
 from app.modules.payments.unit_of_work import PagoUnitOfWork
+from app.modules.usuarios.schemas import CurrentUser
 
 MP_API_BASE = "https://api.mercadopago.com"
 logger = logging.getLogger(__name__)
@@ -35,17 +36,37 @@ class PaymentService:
     def _get_mp_public_key(self) -> Optional[str]:
         return settings.MP_PUBLIC_KEY or settings.MERCADOPAGO_PUBLIC_KEY or None
 
+    def _can_manage_payments(self, roles: list[str]) -> bool:
+        normalized = {normalize_role(role) for role in roles}
+        return ROLE_ADMIN in normalized or ROLE_PEDIDOS in normalized
+
+    def _check_ownership(self, pedido: Pedido, current_user: CurrentUser) -> None:
+        """Verificar que el usuario sea dueño del pedido o tenga rol admin/pedidos."""
+        if self._can_manage_payments(current_user.roles):
+            return
+        if pedido.usuario_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permiso para gestionar este pago",
+            )
+
     async def _crear_preferencia_mp(
-        self, monto: Decimal, titulo: str, pedido_id: int, back_urls: dict
+        self, monto: Decimal, titulo: str, pedido_id: int, back_urls: dict, frontend_url: str = ""
     ) -> dict:
         access_token = self._get_mp_access_token()
         if not access_token:
             raise RuntimeError("MercadoPago no está configurado. Configure MP_ACCESS_TOKEN")
 
-        notification_url = (
-            settings.MP_WEBHOOK_URL
-            or f"{settings.VITE_API_URL}/api/v1/pagos/webhook"
-        )
+        notification_url = settings.MP_WEBHOOK_URL
+        if not notification_url:
+            notification_url = f"{settings.VITE_API_URL}/api/v1/pagos/webhook"
+            if "localhost" in notification_url or "127.0.0.1" in notification_url:
+                logger.warning(
+                    "MP_WEBHOOK_URL no está configurada y VITE_API_URL apunta a localhost (%s). "
+                    "MercadoPago no podrá enviar notificaciones de pago. "
+                    "Configurá MP_WEBHOOK_URL con una URL pública (ej: ngrok).",
+                    notification_url,
+                )
 
         preference_data = {
             "items": [{
@@ -58,6 +79,18 @@ class PaymentService:
             "back_urls": back_urls,
             "notification_url": notification_url,
         }
+
+        # auto_return solo con URLs públicas (HTTPS requerido por MP)
+        if frontend_url and "localhost" not in frontend_url and "127.0.0.1" not in frontend_url:
+            preference_data["auto_return"] = "approved"
+
+        logger.info(
+            "Creando preferencia MP: pedido_id=%s notification_url=%s auto_return=%s back_urls=%s",
+            pedido_id,
+            notification_url,
+            preference_data.get("auto_return"),
+            back_urls,
+        )
 
         headers = {
             "Authorization": f"Bearer {access_token}",
@@ -110,11 +143,13 @@ class PaymentService:
             raise RuntimeError(f"Error al consultar pago {payment_id}")
 
         data = response.json()
+        logger.debug("Respuesta MP consulta pago %s: %s", payment_id, data)
         return {
             "mp_payment_id": data.get("id"),
             "mp_status": data.get("status"),
             "mp_status_detail": data.get("status_detail"),
             "mp_merchant_order_id": data.get("merchant_order_id"),
+            "external_reference": data.get("external_reference"),
         }
 
     async def _buscar_pago_mp_por_referencia(self, pedido_id: int) -> Optional[int]:
@@ -166,11 +201,11 @@ class PaymentService:
                 detail="MercadoPago no configurado. Configure MP_ACCESS_TOKEN",
             )
 
-        ngrok_url = settings.NGROK_URL or settings.VITE_FRONTEND_URL or "http://localhost:8000"
+        frontend_url = settings.VITE_FRONTEND_URL or "http://localhost:5500"
         back_urls = {
-            "success": f"{ngrok_url}/orders/{pedido_id}/success",
-            "failure": f"{ngrok_url}/orders/{pedido_id}/failure",
-            "pending": f"{ngrok_url}/orders/{pedido_id}/pending",
+            "success": f"{frontend_url}/orders/{pedido_id}/approved",
+            "failure": f"{frontend_url}/orders/{pedido_id}/failure",
+            "pending": f"{frontend_url}/orders/{pedido_id}/pending",
         }
 
         try:
@@ -179,6 +214,7 @@ class PaymentService:
                 titulo=f"Pedido #{pedido_id} - FoodStore",
                 pedido_id=pedido_id,
                 back_urls=back_urls,
+                frontend_url=frontend_url,
             )
         except RuntimeError as e:
             raise HTTPException(
@@ -249,14 +285,24 @@ class PaymentService:
         pago_mp_id = payment_id or data_id
 
         if not pago_mp_id:
+            logger.warning("Webhook ignorado: no se recibió payment_id")
             return {"status": "ignored", "reason": "No payment ID"}
 
         if topic not in (None, "payment", "merchant_order"):
+            logger.info("Webhook ignorado por topic=%s", topic)
             return {"status": "ignored", "reason": f"Topic: {topic}"}
+
+        logger.info("Webhook payment_id recibido: %s", pago_mp_id)
 
         try:
             mp_info = await self._consultar_pago_mp(int(pago_mp_id))
             estado_mp = mp_info.get("mp_status")
+            external_reference = mp_info.get("external_reference")
+
+            logger.info(
+                "Webhook consulta MP: payment_id=%s external_reference=%s status=%s",
+                pago_mp_id, external_reference, estado_mp,
+            )
 
             if estado_mp == "approved":
                 nuevo_estado = "aprobado"
@@ -267,20 +313,28 @@ class PaymentService:
             else:
                 return {"status": "ignored", "reason": f"Unknown status: {estado_mp}"}
 
-            with PagoUnitOfWork(self._session) as uow:
-                pago = uow.pagos.get_by_mp_payment_id(int(pago_mp_id))
+            # Buscar pago local usando external_reference (pedido_id)
+            # porque mp_payment_id aún es NULL al crearse la preferencia
+            pedido_id = int(external_reference) if external_reference else None
+            logger.info("Webhook pedido_id desde external_reference: %s", pedido_id)
 
-                if not pago and mp_info.get("mp_merchant_order_id"):
-                    pago = uow.pagos.get_by_mp_merchant_order_id(
-                        mp_info["mp_merchant_order_id"]
-                    )
+            with PagoUnitOfWork(self._session) as uow:
+                if pedido_id:
+                    pago = uow.pagos.get_ultimo_by_pedido(pedido_id)
+                else:
+                    pago = None
 
                 if not pago:
+                    logger.warning(
+                        "Webhook: pago local no encontrado para pedido_id=%s", pedido_id
+                    )
                     return {"status": "ignored", "reason": "Pago not found in local DB"}
 
-                if pago.estado != "pendiente":
-                    return {"status": "already_processed", "estado": pago.estado}
+                if pago.estado == "aprobado":
+                    logger.info("Webhook: pago %s ya procesado previamente", pago.id)
+                    return {"status": "already_processed", "estado": pago.estado, "pago_id": pago.id, "pedido_id": pago.pedido_id}
 
+                # Actualizar campos MP
                 pago.mp_payment_id = int(pago_mp_id)
                 pago.mp_status = estado_mp
                 pago.mp_status_detail = mp_info.get("mp_status_detail")
@@ -292,12 +346,20 @@ class PaymentService:
                 if nuevo_estado == "aprobado":
                     pedido = self._session.get(Pedido, pago.pedido_id)
                     if pedido:
-                        pedido.estado_codigo = STATE_CONFIRMADO
+                        pedido.estado_codigo = STATE_PAGADO
                         pedido.forma_pago_codigo = "MERCADOPAGO"
                         pedido.updated_at = datetime.now(timezone.utc)
                         self._session.add(pedido)
                         descontar_stock_pedido(self._session, pedido.id)
+                        logger.info(
+                            "Webhook: pedido %s actualizado a PAGADO, stock descontado",
+                            pedido.id,
+                        )
 
+            logger.info(
+                "Webhook procesado: pago_id=%s pedido_id=%s estado=%s",
+                pago.id, pago.pedido_id, nuevo_estado,
+            )
             return {
                 "status": "processed",
                 "pago_id": pago.id,
@@ -310,7 +372,7 @@ class PaymentService:
             return {"status": "error", "reason": str(e)}
 
     async def confirmar_pago(
-        self, pedido_id: int, payment_id: Optional[int] = None
+        self, pedido_id: int, payment_id: Optional[int] = None, current_user: Optional[CurrentUser] = None
     ) -> PagoEstadoResponse:
         pedido = self._session.get(Pedido, pedido_id)
         if not pedido:
@@ -318,6 +380,9 @@ class PaymentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Pedido no encontrado",
             )
+
+        if current_user:
+            self._check_ownership(pedido, current_user)
 
         resolved_payment_id = payment_id
         if not resolved_payment_id:
@@ -360,8 +425,8 @@ class PaymentService:
                     pago.updated_at = datetime.now(timezone.utc)
                     uow.pagos.add(pago)
 
-                    if nuevo_estado == "aprobado":
-                        pedido.estado_codigo = STATE_CONFIRMADO
+                    if nuevo_estado == "aprobado" and pedido.estado_codigo == "PENDIENTE":
+                        pedido.estado_codigo = STATE_PAGADO
                         pedido.forma_pago_codigo = "MERCADOPAGO"
                         pedido.updated_at = datetime.now(timezone.utc)
                         self._session.add(pedido)
@@ -425,7 +490,7 @@ class PaymentService:
                 uow.pagos.add(pago)
 
             if nuevo_estado == "aprobado":
-                pedido.estado_codigo = STATE_CONFIRMADO
+                pedido.estado_codigo = STATE_PAGADO
                 pedido.updated_at = datetime.now(timezone.utc)
                 self._session.add(pedido)
                 descontar_stock_pedido(self._session, pedido.id)

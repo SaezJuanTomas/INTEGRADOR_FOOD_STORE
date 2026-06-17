@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, WebSocket, WebSocketDisconnect
 from sqlmodel import Session
 
 from app.core.deps import get_current_active_user, require_roles
 from app.core.database import get_session
 from app.core.rbac import ROLE_ADMIN, ROLE_STOCK
+from app.core.websocket import manager
 from app.modules.usuarios.schemas import CurrentUser
 from app.modules.productos.schemas import (
     ProductoCreate,
@@ -65,6 +66,14 @@ def list_productos_public(
     return svc.get_public(offset=offset, limit=limit, categoria_id=categoria_id, q=q)
 
 
+@router.get("/public/{producto_id}", response_model=ProductoPublic)
+def get_producto_public(
+    producto_id: int,
+    svc: ProductoService = Depends(get_producto_service),
+) -> ProductoPublic:
+    return svc.get_by_id(producto_id)
+
+
 @router.get("/{producto_id}", response_model=ProductoPublic)
 def get_producto(
     producto_id: int,
@@ -75,13 +84,13 @@ def get_producto(
 
 
 @router.patch("/{producto_id}", response_model=ProductoPublic)
-def update_producto(
+async def update_producto(
     producto_id: int,
     data: ProductoUpdate,
     _: CurrentUser = Depends(require_roles([ROLE_ADMIN])),
     svc: ProductoService = Depends(get_producto_service),
 ) -> ProductoPublic:
-    return svc.update(producto_id, data)
+    return await svc.update(producto_id, data)
 
 
 @router.delete("/{producto_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -103,20 +112,32 @@ def restore_producto(
 
 
 @router.patch("/{producto_id}/disponibilidad", response_model=ProductoPublic)
-def update_disponibilidad_producto(
+async def update_disponibilidad_producto(
     producto_id: int,
     data: ProductoDisponibilidadUpdate,
     _: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_STOCK])),
     svc: ProductoService = Depends(get_producto_service),
 ) -> ProductoPublic:
-    return svc.update_disponibilidad(producto_id, data.disponible)
+    return await svc.update_disponibilidad(producto_id, data.disponible)
 
 
 @router.patch("/{producto_id}/stock", response_model=ProductoPublic)
-def update_stock_producto(
+async def update_stock_producto(
     producto_id: int,
     data: ProductoStockUpdate,
     _: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_STOCK])),
     svc: ProductoService = Depends(get_producto_service),
 ) -> ProductoPublic:
-    return svc.update_stock_manual(producto_id, data.stock_cantidad)
+    return await svc.update_stock_manual(producto_id, data.stock_cantidad)
+
+
+@router.websocket("/ws/productos")
+async def productos_websocket(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)

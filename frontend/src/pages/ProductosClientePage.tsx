@@ -1,10 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../context/CartContext";
 import type { Categoria } from "../models/Categoria";
 import type { Producto } from "../models/Producto";
-import { categoriaService, getProductosPublic } from "../services/api";
+import { categoriaService, getProductosPublic, getProductoPublic, getProductosWebSocketUrl } from "../services/api";
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("es-AR", {
@@ -27,10 +27,16 @@ export function ProductosClientePage(): JSX.Element {
   const [search, setSearch] = useState("");
   const [categoriaFilter, setCategoriaFilter] = useState("");
   const [soloDisponibles, setSoloDisponibles] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [addingIds, setAddingIds] = useState<Set<number>>(new Set());
+  const queryClient = useQueryClient();
+
+  const catIdParam = categoriaFilter ? parseInt(categoriaFilter, 10) : undefined;
 
   const productosQuery = useQuery({
-    queryKey: ["productos", "cliente-catalogo"],
-    queryFn: () => getProductosPublic(0, 100),
+    queryKey: ["productos", "cliente-catalogo", catIdParam],
+    queryFn: () => getProductosPublic(0, 100, catIdParam),
+    placeholderData: (prev) => prev,
   });
 
   const categoriasQuery = useQuery({
@@ -47,12 +53,7 @@ export function ProductosClientePage(): JSX.Element {
       const q = search.toLowerCase();
       items = items.filter((p) => p.nombre.toLowerCase().includes(q));
     }
-    if (categoriaFilter) {
-      const catId = parseInt(categoriaFilter, 10);
-      if (!Number.isNaN(catId)) {
-        items = items.filter((p) => p.categoria_id === catId);
-      }
-    }
+
     if (soloDisponibles) {
       items = items.filter((p) => {
         const stockOk = p.stock_disponible === null || p.stock_disponible > 0;
@@ -61,6 +62,35 @@ export function ProductosClientePage(): JSX.Element {
     }
     return items;
   }, [productos, search, categoriaFilter, soloDisponibles]);
+
+  const showToast = useCallback((msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  useEffect(() => {
+    const ws = new WebSocket(getProductosWebSocketUrl());
+    ws.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.event === "PRODUCTO_UPDATED" || payload.event === "INGREDIENTE_UPDATED") {
+          queryClient.invalidateQueries({ queryKey: ["productos", "cliente-catalogo"] });
+          showToast("Catálogo actualizado");
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+    ws.onclose = () => {
+      // Reconnect after 5 seconds
+      setTimeout(() => {
+        // simple reconnect logic will be handled by the effect cleanup/rerun
+      }, 5000);
+    };
+    return () => {
+      ws.close();
+    };
+  }, [queryClient, showToast]);
 
   if (productosQuery.isLoading) {
     return <p className="text-slate-700">Cargando productos...</p>;
@@ -81,6 +111,12 @@ export function ProductosClientePage(): JSX.Element {
 
   return (
     <div className="space-y-5">
+      {toast && (
+        <div className="fixed right-4 top-4 z-50 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+          {toast}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-orange-900">Productos</h1>
@@ -170,20 +206,32 @@ export function ProductosClientePage(): JSX.Element {
 
                   <button
                     type="button"
-                    disabled={!puedeAgregar}
-                    onClick={() => {
-                      agregarProducto({
-                        producto_id: producto.id,
-                        nombre: producto.nombre,
-                        precio: Number(producto.precio_base),
-                        cantidad: 1,
-                        imagen: producto.imagenes_url?.[0] ?? undefined,
-                      });
-                      window.alert("Producto agregado al carrito");
+                    disabled={!puedeAgregar || addingIds.has(producto.id)}
+                    onClick={async () => {
+                      setAddingIds((prev) => new Set(prev).add(producto.id));
+                      try {
+                        const fresh = await getProductoPublic(producto.id);
+                        agregarProducto({
+                          producto_id: fresh.id,
+                          nombre: fresh.nombre,
+                          precio: Number(fresh.precio_base),
+                          cantidad: 1,
+                          imagen: fresh.imagenes_url?.[0] ?? undefined,
+                        });
+                        window.alert("Producto agregado al carrito");
+                      } catch {
+                        window.alert("Error al obtener precio actualizado");
+                      } finally {
+                        setAddingIds((prev) => {
+                          const next = new Set(prev);
+                          next.delete(producto.id);
+                          return next;
+                        });
+                      }
                     }}
                     className="mt-auto rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-400 bg-orange-500 hover:bg-orange-600"
                   >
-                    {puedeAgregar ? "Agregar al carrito" : "No disponible"}
+                    {addingIds.has(producto.id) ? "Agregando..." : (puedeAgregar ? "Agregar al carrito" : "No disponible")}
                   </button>
                 </div>
               </article>

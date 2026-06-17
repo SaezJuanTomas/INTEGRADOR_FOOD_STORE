@@ -1,21 +1,23 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
-import { getPedidoDetail, getHistorialPedido, getPagoByPedido, confirmPayment, manualAprobarPago } from "../services/api";
+import { getPedidoDetail, getHistorialPedido, getPagoByPedido, confirmPayment, manualAprobarPago, verifyPayment } from "../services/api";
 import type { HistorialEstadoPedidoPublic } from "../services/api";
 
 const stateLabels: Record<string, string> = {
   PENDIENTE: "Pendiente",
-  CONFIRMADO: "Confirmado",
-  EN_PREP: "Preparando",
+  PAGADO: "Pagado",
+  EN_PREPARACION: "Preparando",
+  TERMINADO: "Terminado",
   ENTREGADO: "Entregado",
   CANCELADO: "Cancelado",
 };
 
 const stateColors: Record<string, string> = {
   PENDIENTE: "bg-yellow-100 text-yellow-800",
-  CONFIRMADO: "bg-blue-100 text-blue-800",
-  EN_PREP: "bg-purple-100 text-purple-800",
+  PAGADO: "bg-blue-100 text-blue-800",
+  EN_PREPARACION: "bg-purple-100 text-purple-800",
+  TERMINADO: "bg-teal-100 text-teal-800",
   ENTREGADO: "bg-green-100 text-green-800",
   CANCELADO: "bg-red-100 text-red-800",
 };
@@ -93,6 +95,28 @@ export function VentaDetailPage(): JSX.Element {
     },
   });
 
+  const [verifying, setVerifying] = useState(false);
+  const verifiedRef = useRef(false);
+
+  useEffect(() => {
+    const venta = ventaQuery.data;
+    if (!venta || verifiedRef.current || verifying) return;
+    const isMp = venta.forma_pago_codigo === "MERCADOPAGO" || venta.forma_pago_codigo === "mercadopago";
+    if (venta.estado_codigo === "PENDIENTE" && isMp) {
+      verifiedRef.current = true;
+      setVerifying(true);
+      verifyPayment(venta.id)
+        .then((res) => {
+          if (res.estado === "aprobado" || res.estado === "rechazado") {
+            ventaQuery.refetch();
+            pagoQuery.refetch();
+          }
+        })
+        .catch(() => {})
+        .finally(() => setVerifying(false));
+    }
+  }, [ventaQuery.data, ventaId, ventaQuery, pagoQuery, verifying]);
+
   if (Number.isNaN(ventaId)) {
     return <p className="text-red-600">ID de venta inválido.</p>;
   }
@@ -100,6 +124,17 @@ export function VentaDetailPage(): JSX.Element {
   if (ventaQuery.isLoading) return <p className="text-slate-600">Cargando venta...</p>;
   if (ventaQuery.isError || !ventaQuery.data) {
     return <p className="text-red-600">Error al cargar la venta.</p>;
+  }
+
+  if (verifying) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600" />
+          <p className="text-slate-600">Verificando estado del pago con MercadoPago...</p>
+        </div>
+      </div>
+    );
   }
 
   const venta = ventaQuery.data;

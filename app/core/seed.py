@@ -38,17 +38,18 @@ def initialize_roles_and_states() -> None:
         _create_estados_pedido(session)
         _create_formas_pago(session)
         _migrate_legacy_states(session)
-        _migrate_old_state(session, "PREPARANDO", "EN_PREP")
-        _migrate_old_state(session, "PAGADO", "CONFIRMADO")
-        _migrate_old_state(session, "EN_CAMINO", "EN_PREP")
+        _migrate_old_state(session, "PREPARANDO", "EN_PREPARACION")
+        _migrate_old_state(session, "CONFIRMADO", "PAGADO")
+        _migrate_old_state(session, "EN_PREP", "EN_PREPARACION")
+        _migrate_old_state(session, "EN_CAMINO", "EN_PREPARACION")
         _ensure_admin_user(session)
         _ensure_cliente_user(session)
         _ensure_stock_user(session)
         _ensure_pedidos_user(session)
         _ensure_default_role_for_all(session)
         _cleanup_legacy_client_role(session)
-        _seed_example_data(session)
-        _seed_ventas_data(session)
+        # _seed_example_data(session)
+        # _seed_ventas_data(session)
         session.commit()
     except Exception as e:
         session.rollback()
@@ -89,9 +90,10 @@ def _create_roles(session: Session) -> None:
 
 def _create_estados_pedido(session: Session) -> None:
     estados = [
-        ("PENDIENTE", "Pendiente", "Pedido creado, aguardando confirmación"),
-        ("CONFIRMADO", "Confirmado", "Pedido confirmado, se descontó stock"),
-        ("EN_PREP", "En Preparación", "Pedido en preparación"),
+        ("PENDIENTE", "Pendiente", "Pedido creado, aguardando pago"),
+        ("PAGADO", "Pagado", "Pedido pagado, pendiente de preparación"),
+        ("EN_PREPARACION", "En Preparación", "Pedido en preparación"),
+        ("TERMINADO", "Terminado", "Pedido terminado, listo para entregar"),
         ("ENTREGADO", "Entregado", "Pedido entregado al cliente"),
         ("CANCELADO", "Cancelado", "Pedido cancelado"),
     ]
@@ -416,19 +418,19 @@ def _seed_ventas_data(session: Session) -> None:
         (4, "ENTREGADO", [2, 3], [2, 1], "MERCADOPAGO"),
         (5, "ENTREGADO", [1, 0], [1, 1], "MERCADOPAGO"),
         (6, "ENTREGADO", [0, 3, 4], [2, 1, 2], "MERCADOPAGO"),
-        (7, "CONFIRMADO", [3, 4], [2, 2], "MERCADOPAGO"),
-        (8, "EN_PREP", [1, 2], [2, 1], "EFECTIVO"),
+        (7, "PAGADO", [3, 4], [2, 2], "MERCADOPAGO"),
+        (8, "EN_PREPARACION", [1, 2], [2, 1], "EFECTIVO"),
         (9, "ENTREGADO", [0, 3], [1, 3], "MERCADOPAGO"),
         (10, "ENTREGADO", [2, 4], [3, 2], "MERCADOPAGO"),
         (11, "ENTREGADO", [0], [4], "EFECTIVO"),
-        (12, "CONFIRMADO", [1, 3], [2, 1], "MERCADOPAGO"),
+        (12, "PAGADO", [1, 3], [2, 1], "MERCADOPAGO"),
         (14, "ENTREGADO", [0, 2], [2, 2], "MERCADOPAGO"),
-        (16, "EN_PREP", [0, 3], [1, 1], "MERCADOPAGO"),
+        (16, "EN_PREPARACION", [0, 3], [1, 1], "MERCADOPAGO"),
         (18, "ENTREGADO", [1, 4], [2, 1], "EFECTIVO"),
         (20, "ENTREGADO", [0, 3, 4], [3, 1, 1], "MERCADOPAGO"),
         (22, "PENDIENTE", [0], [2], None),
         (24, "ENTREGADO", [2, 3], [2, 2], "MERCADOPAGO"),
-        (26, "CONFIRMADO", [1, 3], [1, 2], "MERCADOPAGO"),
+        (26, "PAGADO", [1, 3], [1, 2], "MERCADOPAGO"),
         (28, "ENTREGADO", [0, 4], [2, 3], "MERCADOPAGO"),
     ]
 

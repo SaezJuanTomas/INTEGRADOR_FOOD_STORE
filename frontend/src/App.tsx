@@ -1,8 +1,10 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { NavBar } from "./components/NavBar";
+import { setLogoutHandler } from "./services/api";
 import { CategoriasPage, IngredientesPage, ProductosPage } from "./pages/EntityPages";
 import { CategoryDetailPage } from "./pages/CategoryDetailPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
@@ -49,7 +51,15 @@ function DashboardLayout({ children }: DashboardLayoutProps): JSX.Element {
 }
 
 export function App(): JSX.Element {
-  const { isAuthenticated, isAdmin, isStock, isPedidos } = useAuth();
+  const { isAuthenticated, isAdmin, isStock, isPedidos, logout } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    setLogoutHandler(() => {
+      logout();
+      navigate("/login");
+    });
+  }, [logout, navigate]);
 
   return (
     <CartProvider>
@@ -249,9 +259,17 @@ export function App(): JSX.Element {
         {/* MP redirect handler */}
         <Route
           path="/orders/:pedidoId/:status"
+          element={<OrderRedirectPage />}
+        />
+
+        {/* Post-payment redirect target (MP back_urls) */}
+        <Route
+          path="/pedido/:id"
           element={
             <ProtectedRoute>
-              <OrderRedirectPage />
+              <DashboardLayout>
+                {isAdmin || isPedidos ? <VentaDetailPage /> : <ClientePedidoDetailPage />}
+              </DashboardLayout>
             </ProtectedRoute>
           }
         />

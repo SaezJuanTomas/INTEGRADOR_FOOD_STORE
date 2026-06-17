@@ -60,13 +60,13 @@ def get_ingrediente_detail(
 
 
 @router.patch("/{ingrediente_id}", response_model=IngredientePublic)
-def update_ingrediente(
+async def update_ingrediente(
     ingrediente_id: int,
     data: IngredienteUpdate,
     _: CurrentUser = Depends(require_roles([ROLE_ADMIN, ROLE_STOCK])),
     svc: IngredienteService = Depends(get_ingrediente_service),
 ) -> IngredientePublic:
-    return svc.update(ingrediente_id, data)
+    return await svc.update(ingrediente_id, data)
 
 
 @router.delete("/{ingrediente_id}", status_code=status.HTTP_204_NO_CONTENT)

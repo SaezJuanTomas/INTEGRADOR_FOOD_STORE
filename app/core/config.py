@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def CORS_ORIGINS(self) -> list[str]:
-        return [
+        origins = [
             "http://127.0.0.1:5500",
             "http://127.0.0.1:5501",
             "http://localhost:5500",
@@ -54,6 +54,11 @@ class Settings(BaseSettings):
             "http://127.0.0.1:5173",
             "http://localhost:5173",
         ]
+        if self.VITE_FRONTEND_URL and self.VITE_FRONTEND_URL not in origins:
+            origins.append(self.VITE_FRONTEND_URL)
+        if self.NGROK_URL and self.NGROK_URL not in origins:
+            origins.append(self.NGROK_URL)
+        return origins
 
     @computed_field
     @property

@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,6 +18,14 @@ from app.modules.estadisticas.router import router as estadisticas_router
 from app.modules.uploads.router import router as uploads_router
 from app.modules.direcciones.router import router as direcciones_router
 from app.core.rate_limit import RateLimitMiddleware
+from app.core.logging_middleware import LoggingMiddleware
+from app.core.exception_handlers import register_exception_handlers
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)-16s | %(levelname)-7s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 @asynccontextmanager
@@ -43,6 +52,9 @@ app.add_middleware(
 )
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(LoggingMiddleware)
+
+register_exception_handlers(app)
 
 # Routers de autenticación y usuarios
 app.include_router(auth_router, prefix="/auth", tags=["auth"])

@@ -1,9 +1,7 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { loginRequest } from "../services/api";
+import { createContext, useContext, useMemo, useState, useEffect, useCallback } from "react";
+import { loginRequest, api } from "../services/api";
 
 const TOKEN_KEY = "food_store_token";
-const USER_KEY = "food_store_user";
-const ROLES_KEY = "food_store_roles";
 
 export interface User {
   id: number;
@@ -19,6 +17,7 @@ interface AuthContextValue {
   user: User | null;
   roles: string[];
   isAuthenticated: boolean;
+  authLoading: boolean;
   isAdmin: boolean;
   isClient: boolean;
   isStock: boolean;
@@ -26,6 +25,7 @@ interface AuthContextValue {
   hasRole: (role: string) => boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  verifySession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -34,84 +34,103 @@ interface AuthProviderProps {
   children: React.ReactNode;
 }
 
+function normalizeRole(role: string): string {
+  return (role || "").trim().toUpperCase();
+}
+
+function hasAnyRole(roles: string[], target: string): boolean {
+  const normalized = normalizeRole(target);
+  if (normalized === "CLIENT") {
+    return roles.some((r) => ["CLIENT", "CLIENTE"].includes(normalizeRole(r)));
+  }
+  return roles.some((r) => normalizeRole(r) === normalized);
+}
+
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
-    const normalizeRole = (role: string): string => role.trim().toUpperCase();
-
-    const hasRole = (role: string): boolean => {
-      const normalized = normalizeRole(role);
-      if (normalized === "CLIENT") {
-        return roles.some((current) => ["CLIENT", "CLIENTE"].includes(normalizeRole(current)));
-      }
-      return roles.some((current) => normalizeRole(current) === normalized);
-    };
-
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem(USER_KEY);
-    return stored ? JSON.parse(stored) : null;
-  });
-  const [roles, setRoles] = useState<string[]>(() => {
-    const stored = localStorage.getItem(ROLES_KEY);
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [roles, setRoles] = useState<string[]>([]);
+  const [authLoading, setAuthLoading] = useState(() => Boolean(localStorage.getItem(TOKEN_KEY)));
+
+  const verifySession = useCallback(async () => {
+    try {
+      const me = await api.get("/auth/me");
+      const data = me.data;
+      const normalizedRoles = (data.roles || []).map((r: string) => normalizeRole(r));
+      setUser({
+        id: data.id,
+        nombre: data.nombre,
+        apellido: data.apellido,
+        email: data.email,
+        celular: data.celular,
+        activo: data.activo,
+      });
+      setRoles(normalizedRoles);
+    } catch {
+      setUser(null);
+      setRoles([]);
+      setToken(null);
+      localStorage.removeItem(TOKEN_KEY);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  // On mount, verify session using httpOnly cookie (sent automatically with withCredentials)
+  useEffect(() => {
+    if (token) {
+      verifySession();
+    } else {
+      setAuthLoading(false);
+    }
+  }, []); // only on mount
 
   const login = async (email: string, password: string): Promise<void> => {
     if (!email.trim() || !password.trim()) {
-      const msg = "Email y clave son obligatorios.";
-      console.error("❌", msg);
-      throw new Error(msg);
+      throw new Error("Email y clave son obligatorios.");
     }
-
     try {
-      console.log("🔐 AuthContext.login iniciando...");
       const response = await loginRequest({ email, password });
-      console.log("✅ LoginRequest exitoso. Response:", response);
-      const normalizedRoles = (response.roles || []).map((role) => role.trim().toUpperCase());
-      
+      const normalizedRoles = (response.roles || []).map((r) => normalizeRole(r));
+
       localStorage.setItem(TOKEN_KEY, response.access_token);
-      localStorage.setItem(USER_KEY, JSON.stringify(response.usuario));
-      localStorage.setItem(ROLES_KEY, JSON.stringify(normalizedRoles));
-      console.log("💾 Datos guardados en localStorage");
-      
       setToken(response.access_token);
       setUser(response.usuario);
       setRoles(normalizedRoles);
-      console.log("🔄 Estado actualizado en AuthContext");
     } catch (error) {
-      console.error("❌ Error en AuthContext.login:", error);
       throw error;
     }
   };
 
   const logout = (): void => {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(ROLES_KEY);
     setToken(null);
     setUser(null);
     setRoles([]);
   };
 
-  const isAdmin = hasRole("ADMIN");
-  const isClient = hasRole("CLIENT");
-  const isStock = hasRole("STOCK");
-  const isPedidos = hasRole("PEDIDOS");
+  const isAdmin = hasAnyRole(roles, "ADMIN");
+  const isClient = hasAnyRole(roles, "CLIENT");
+  const isStock = hasAnyRole(roles, "STOCK");
+  const isPedidos = hasAnyRole(roles, "PEDIDOS");
 
   const value = useMemo<AuthContextValue>(
     () => ({
       token,
       user,
       roles,
-      isAuthenticated: Boolean(token),
+      isAuthenticated: Boolean(token) && Boolean(user),
+      authLoading,
       isAdmin,
       isClient,
       isStock,
       isPedidos,
-      hasRole,
+      hasRole: (role: string) => hasAnyRole(roles, role),
       login,
       logout,
+      verifySession,
     }),
-    [token, user, roles, isAdmin, isClient, isStock, isPedidos]
+    [token, user, roles, authLoading, isAdmin, isClient, isStock, isPedidos]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

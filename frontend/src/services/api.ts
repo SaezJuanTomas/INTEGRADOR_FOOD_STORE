@@ -5,6 +5,13 @@ import type { Producto, ProductoCreate, ProductoUpdate } from "../models/Product
 
 const API_BASE_URLS = ["/api"];
 const TOKEN_KEY = "food_store_token";
+
+let _logoutHandler: (() => void) | null = null;
+
+export function setLogoutHandler(handler: () => void): void {
+  _logoutHandler = handler;
+}
+
 export const api = axios.create({
   baseURL: API_BASE_URLS[0],
   withCredentials: true,
@@ -27,8 +34,9 @@ api.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       localStorage.removeItem(TOKEN_KEY);
-      localStorage.removeItem("food_store_user");
-      localStorage.removeItem("food_store_roles");
+      if (_logoutHandler) {
+        _logoutHandler();
+      }
     }
 
     if (!error.response) {
@@ -176,16 +184,13 @@ export interface PedidoPublic {
 }
 
 export async function loginRequest(payload: LoginPayload): Promise<LoginResponse> {
-  console.log("📤 Enviando login request a /auth/login con:", payload.email);
   try {
     const result = await request<LoginResponse>("/auth/login", {
       method: "POST",
       data: payload,
     });
-    console.log("📥 Login response recibido:", result);
     return result;
   } catch (error) {
-    console.error("❌ Error en loginRequest:", error);
     throw error;
   }
 }
@@ -281,6 +286,10 @@ export function getProductosPublic(
   return request<ListResponse<Producto>>(`/productos/public?${params.toString()}`);
 }
 
+export function getProductoPublic(id: number): Promise<Producto> {
+  return request<Producto>(`/productos/public/${id}`);
+}
+
 export interface RegisterPayload {
   nombre: string;
   apellido: string;
@@ -369,6 +378,25 @@ export function setDireccionPrincipalUsuario(
   });
 }
 
+export function deleteDireccionUsuario(
+  usuarioId: number,
+  direccionId: number
+): Promise<void> {
+  return request<void>(`/usuarios/${usuarioId}/direcciones/${direccionId}`, {
+    method: "DELETE",
+  });
+}
+
+export function updatePedidoDireccion(
+  pedidoId: number,
+  direccionEntregaId: number
+): Promise<PedidoDetail> {
+  return request<PedidoDetail>(`/pedidos/${pedidoId}/direccion`, {
+    method: "PATCH",
+    data: { direccion_entrega_id: direccionEntregaId },
+  });
+}
+
 export function createPedido(payload: PedidoCreatePayload): Promise<ConfirmarPedidoResponse> {
   return request<ConfirmarPedidoResponse>("/pedidos", {
     method: "POST",
@@ -420,6 +448,11 @@ export function listPedidos(offset = 0, limit = 50, filter?: PedidosFilter): Pro
 export function getPedidosWebSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/api/pedidos/ws/pedidos`;
+}
+
+export function getProductosWebSocketUrl(): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/api/productos/ws/productos`;
 }
 
 export function getIngredienteDetail(ingredienteId: number): Promise<IngredienteDetail> {
@@ -482,6 +515,9 @@ export interface PedidoDetail {
   updated_at: string;
   estado: EstadoPedidoPublic;
   detalles: DetallePedidoPublic[];
+  pago_estado?: string | null;
+  pago_mp_status?: string | null;
+  pago_mp_payment_id?: number | null;
 }
 
 export interface HistorialEstadoPedidoPublic {
@@ -529,6 +565,12 @@ export function confirmPayment(pedidoId: number, paymentId?: number): Promise<Co
   return request<ConfirmPaymentResponse>("/api/v1/pagos/confirm", {
     method: "POST",
     data: { pedido_id: pedidoId, payment_id: paymentId },
+  });
+}
+
+export function verifyPayment(pedidoId: number): Promise<ConfirmPaymentResponse> {
+  return request<ConfirmPaymentResponse>(`/api/v1/pagos/verify/${pedidoId}`, {
+    method: "GET",
   });
 }
 

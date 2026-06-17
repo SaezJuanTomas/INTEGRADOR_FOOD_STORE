@@ -15,25 +15,27 @@ function asNumber(value: number | string): number {
 
 const estadoColor: Record<string, string> = {
   PENDIENTE: "text-yellow-600",
-  CONFIRMADO: "text-blue-600",
-  EN_PREP: "text-purple-600",
+  PAGADO: "text-blue-600",
+  EN_PREPARACION: "text-purple-600",
+  TERMINADO: "text-teal-600",
   ENTREGADO: "text-green-700",
   CANCELADO: "text-red-600",
 };
 
 const estadoBadgeBg: Record<string, string> = {
   PENDIENTE: "bg-yellow-500",
-  CONFIRMADO: "bg-blue-500",
-  EN_PREP: "bg-purple-500",
+  PAGADO: "bg-blue-500",
+  EN_PREPARACION: "bg-purple-500",
+  TERMINADO: "bg-teal-500",
   ENTREGADO: "bg-green-600",
   CANCELADO: "bg-red-500",
 };
 
-const FILTER_ESTADOS = ["", "PENDIENTE", "CONFIRMADO", "EN_PREP", "ENTREGADO", "CANCELADO"] as const;
+const FILTER_ESTADOS = ["", "PENDIENTE", "PAGADO", "EN_PREPARACION", "TERMINADO", "ENTREGADO", "CANCELADO"] as const;
 const FORMAS_PAGO = ["", "EFECTIVO", "MERCADOPAGO", "TRANSFERENCIA"] as const;
 
 function puedeCancelar(estado: string): boolean {
-  return ["PENDIENTE", "CONFIRMADO"].includes(estado);
+  return ["PENDIENTE", "PAGADO", "EN_PREPARACION"].includes(estado);
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -73,13 +75,13 @@ export function OperacionesPedidosPage(): JSX.Element {
   }, [cargarAllPedidos]);
 
   const stats = useMemo(() => {
-    const pendientes = allPedidos.filter((p) => p.estado_codigo === "PENDIENTE" || p.estado_codigo === "CONFIRMADO");
-    const activos = allPedidos.filter((p) => p.estado_codigo === "EN_PREP");
+    const pendientes = allPedidos.filter((p) => p.estado_codigo === "PENDIENTE");
+    const enPreparacion = allPedidos.filter((p) => p.estado_codigo === "EN_PREPARACION");
     const entregados = allPedidos.filter((p) => p.estado_codigo === "ENTREGADO");
     return {
       total: allPedidos.length,
       pendientes: pendientes.length,
-      activos: activos.length,
+      enPreparacion: enPreparacion.length,
       entregados: entregados.length,
     };
   }, [allPedidos]);
@@ -155,9 +157,10 @@ export function OperacionesPedidosPage(): JSX.Element {
 
   const siguienteEstado = (estado: string): string | null => {
     const flujo: Record<string, string | null> = {
-      PENDIENTE: "CONFIRMADO",
-      CONFIRMADO: "EN_PREP",
-      EN_PREP: "ENTREGADO",
+      PENDIENTE: "PAGADO",
+      PAGADO: "EN_PREPARACION",
+      EN_PREPARACION: "TERMINADO",
+      TERMINADO: "ENTREGADO",
       ENTREGADO: null,
       CANCELADO: null,
     };
@@ -178,7 +181,7 @@ export function OperacionesPedidosPage(): JSX.Element {
       <div className="mb-5">
         <h1 className="text-3xl font-semibold text-orange-950">Operaciones de Pedidos</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {stats.total} pedidos &middot; {stats.pendientes} pendientes/confirmados &middot; {stats.activos} en preparación &middot; {stats.entregados} entregados
+          {stats.total} pedidos &middot; {stats.pendientes} pendientes &middot; {stats.enPreparacion} en preparación &middot; {stats.entregados} entregados
         </p>
       </div>
 

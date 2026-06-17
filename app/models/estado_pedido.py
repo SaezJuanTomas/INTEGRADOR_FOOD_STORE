@@ -7,7 +7,7 @@ from app.core.base import BaseModel
 
 class EstadoPedido(BaseModel, table=True):
     """
-    Estado del pedido (PENDIENTE, CONFIRMADO, PREPARANDO, EN_CAMINO, ENTREGADO, CANCELADO).
+    Estado del pedido (PENDIENTE, PAGADO, EN_PREPARACION, TERMINADO, ENTREGADO, CANCELADO).
     PK: codigo (e.g., PENDIENTE)
     """
 

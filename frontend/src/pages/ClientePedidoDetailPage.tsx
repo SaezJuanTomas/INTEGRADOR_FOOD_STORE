@@ -1,21 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getPedidoDetail, getHistorialPedido, getPagoByPedido, cancelarPedido } from "../services/api";
+import { getPedidoDetail, getHistorialPedido, getPagoByPedido, cancelarPedido, verifyPayment } from "../services/api";
 import type { HistorialEstadoPedidoPublic } from "../services/api";
 import { PaymentButton } from "../components/PaymentButton";
+import { useEffect, useRef, useState } from "react";
 
 const stateLabels: Record<string, string> = {
   PENDIENTE: "Pendiente",
-  CONFIRMADO: "Confirmado",
-  EN_PREP: "Preparando",
+  PAGADO: "Pagado",
+  EN_PREPARACION: "Preparando",
+  TERMINADO: "Terminado",
   ENTREGADO: "Entregado",
   CANCELADO: "Cancelado",
 };
 
 const stateColors: Record<string, string> = {
   PENDIENTE: "bg-yellow-100 text-yellow-800",
-  CONFIRMADO: "bg-blue-100 text-blue-800",
-  EN_PREP: "bg-purple-100 text-purple-800",
+  PAGADO: "bg-blue-100 text-blue-800",
+  EN_PREPARACION: "bg-purple-100 text-purple-800",
+  TERMINADO: "bg-teal-100 text-teal-800",
   ENTREGADO: "bg-green-100 text-green-800",
   CANCELADO: "bg-red-100 text-red-800",
 };
@@ -38,6 +41,28 @@ export function ClientePedidoDetailPage(): JSX.Element {
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+
+  const [verifying, setVerifying] = useState(false);
+  const verifiedRef = useRef(false);
+
+  useEffect(() => {
+    const pedido = pedidoQuery.data;
+    if (!pedido || verifiedRef.current || verifying) return;
+    const isMp = pedido.forma_pago_codigo === "MERCADOPAGO" || pedido.forma_pago_codigo === "mercadopago";
+    if (pedido.estado_codigo === "PENDIENTE" && isMp) {
+      verifiedRef.current = true;
+      setVerifying(true);
+      verifyPayment(pedido.id)
+        .then((res) => {
+          if (res.estado === "aprobado" || res.estado === "rechazado") {
+            queryClient.invalidateQueries({ queryKey: ["cliente-pedido", pedidoId] });
+            queryClient.invalidateQueries({ queryKey: ["cliente-pago", pedidoId] });
+          }
+        })
+        .catch(() => {})
+        .finally(() => setVerifying(false));
+    }
+  }, [pedidoQuery.data, pedidoId, queryClient, verifying]);
 
   const cancelarMutation = useMutation({
     mutationFn: () => cancelarPedido(pedidoId, "Cancelado por el cliente"),
@@ -62,6 +87,17 @@ export function ClientePedidoDetailPage(): JSX.Element {
   if (pedidoQuery.isLoading) return <p className="text-slate-600">Cargando pedido...</p>;
   if (pedidoQuery.isError || !pedidoQuery.data) {
     return <p className="text-red-600">Error al cargar el pedido.</p>;
+  }
+
+  if (verifying) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600" />
+          <p className="text-slate-600">Verificando estado del pago con MercadoPago...</p>
+        </div>
+      </div>
+    );
   }
 
   const pedido = pedidoQuery.data;
@@ -102,7 +138,7 @@ export function ClientePedidoDetailPage(): JSX.Element {
         </div>
       </div>
 
-      {pedido.estado_codigo === "PENDIENTE" && (!pago || pago.estado === "pendiente") && (
+      {(pedido.estado_codigo === "PENDIENTE") && (!pago || pago.estado === "pendiente") && (
         <div className="rounded-xl border border-blue-100 bg-blue-50 p-6 shadow-sm">
           <div className="space-y-4">
             <div>

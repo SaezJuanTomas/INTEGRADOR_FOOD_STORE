@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 from sqlmodel import Session
 
+from app.core.websocket import manager
 from app.models import Ingrediente
 from app.modules.catalogo.unit_of_work import CatalogUnitOfWork
 from app.modules.ingredientes.schemas import (
@@ -26,6 +27,9 @@ class IngredienteService:
 
     def _is_active(self, ingrediente: Ingrediente) -> bool:
         return bool(ingrediente.activo) and ingrediente.deleted_at is None
+
+    async def _broadcast_event(self, event_type: str, data: dict) -> None:
+        await manager.broadcast(event_type, data)
 
     def create(self, data: IngredienteCreate) -> IngredientePublic:
         """Crear nuevo ingrediente."""
@@ -85,7 +89,7 @@ class IngredienteService:
 
         return result
 
-    def update(self, ingrediente_id: int, data: IngredienteUpdate) -> IngredientePublic:
+    async def update(self, ingrediente_id: int, data: IngredienteUpdate) -> IngredientePublic:
         """Actualizar ingrediente."""
         with CatalogUnitOfWork(self._session) as uow:
             ingrediente = uow.ingredientes.get_by_id(ingrediente_id)
@@ -105,6 +109,8 @@ class IngredienteService:
             uow.ingredientes.add(ingrediente)
             result = IngredientePublic.model_validate(ingrediente)
 
+        if "costo_unitario" in update_data or "unidad" in update_data:
+            await self._broadcast_event("INGREDIENTE_UPDATED", {"ingrediente_id": ingrediente_id, "data": result.model_dump()})
         return result
 
     def soft_delete(self, ingrediente_id: int) -> None:

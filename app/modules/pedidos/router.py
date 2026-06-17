@@ -14,6 +14,7 @@ from app.core.security import decode_access_token
 from app.core.websocket import manager
 from app.modules.pedidos.service import PedidoService
 from app.modules.pedidos.schemas import (
+    CambiarDireccionPedidoInput,
     PedidoCreate,
     PedidoPublic,
     PedidoDetail,
@@ -74,7 +75,7 @@ def crear_pedido(
 def list_pedidos(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
-    estado: Optional[str] = Query(default=None, description="Filtrar por estado (PENDIENTE, CONFIRMADO, EN_PREP, ENTREGADO, CANCELADO)"),
+    estado: Optional[str] = Query(default=None, description="Filtrar por estado (PENDIENTE, PAGADO, EN_PREPARACION, TERMINADO, ENTREGADO, CANCELADO)"),
     forma_pago: Optional[str] = Query(default=None, alias="forma_pago", description="Filtrar por forma de pago (EFECTIVO, MERCADOPAGO, TRANSFERENCIA)"),
     fecha_desde: Optional[datetime] = Query(default=None, alias="fecha_desde", description="Filtrar desde fecha (ISO 8601)"),
     fecha_hasta: Optional[datetime] = Query(default=None, alias="fecha_hasta", description="Filtrar hasta fecha (ISO 8601)"),
@@ -130,6 +131,26 @@ def get_pedido(
 
 
 # ============================================================================
+# CAMBIAR DIRECCIÓN DE ENTREGA
+# ============================================================================
+
+@router.patch("/{pedido_id}/direccion", response_model=PedidoDetail)
+def cambiar_direccion_pedido(
+    pedido_id: int,
+    data: CambiarDireccionPedidoInput,
+    current_user: CurrentUser = Depends(require_roles([ROLE_CLIENT, ROLE_ADMIN])),
+    svc: PedidoService = Depends(get_pedido_service),
+) -> PedidoDetail:
+    """
+    Cambiar la dirección de entrega de un pedido pendiente.
+    
+    Solo se puede cambiar si el pedido está en estado PENDIENTE.
+    La dirección debe pertenecer al usuario.
+    """
+    return svc.cambiar_direccion(current_user.id, pedido_id, data.direccion_entrega_id)
+
+
+# ============================================================================
 # OPERACIONES EN PEDIDOS
 # ============================================================================
 
@@ -141,14 +162,14 @@ async def confirmar_pedido(
     svc: PedidoService = Depends(get_pedido_service),
 ) -> ConfirmarPedidoResponse:
     """
-    Confirmar pedido (transición: PENDIENTE → CONFIRMADO).
+    Confirmar pedido (transición: PENDIENTE → PAGADO).
     
     Requiere token JWT válido.
     
     Lógica:
     - Valida que el pedido está en estado PENDIENTE
     - Descuenta stock de cada producto
-    - Cambia estado a CONFIRMADO
+    - Cambia estado a PAGADO
     - Registra transición en historial
     
     Parámetros:
@@ -170,7 +191,7 @@ async def cancelar_pedido(
     Requiere token JWT válido.
     
     Lógica:
-    - Valida que el pedido está en estado PENDIENTE o CONFIRMADO
+    - Valida que el pedido está en estado PENDIENTE o PAGADO
     - Si estaba confirmado, restaura stock de cada producto
     - Cambia estado a CANCELADO
     - Registra transición en historial
@@ -199,15 +220,16 @@ async def cambiar_estado_pedido(
     Requiere token JWT válido (idealmente con rol ADMIN).
     
     Transiciones permitidas:
-    - PENDIENTE → CONFIRMADO, CANCELADO
-    - CONFIRMADO → EN_PREP, CANCELADO
-    - EN_PREP → ENTREGADO, CANCELADO
+    - PENDIENTE → PAGADO, CANCELADO
+    - PAGADO → EN_PREPARACION, CANCELADO
+    - EN_PREPARACION → TERMINADO, CANCELADO
+    - TERMINADO → ENTREGADO
     - ENTREGADO → (ninguno)
     - CANCELADO → (ninguno)
     
     Parámetros:
     - **pedido_id**: ID del pedido
-    - **estado_codigo**: Nuevo estado (e.g., CONFIRMADO, EN_PREP, ENTREGADO)
+    - **estado_codigo**: Nuevo estado (e.g., PAGADO, EN_PREPARACION, TERMINADO, ENTREGADO)
     - **motivo**: Razón del cambio (opcional)
     """
     return await svc.cambiar_estado(current_user.id, pedido_id, data)

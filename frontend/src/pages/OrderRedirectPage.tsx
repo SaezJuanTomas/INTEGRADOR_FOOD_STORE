@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
-import { confirmPayment } from "../services/api";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
+import { verifyPayment } from "../services/api";
 
 export default function OrderRedirectPage() {
   const { pedidoId, status } = useParams<{ pedidoId: string; status: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const id = Number(pedidoId);
@@ -15,10 +16,8 @@ export default function OrderRedirectPage() {
       return;
     }
 
-    const paymentId = searchParams.get("payment_id");
-    const paymentIdNum = paymentId ? Number(paymentId) : undefined;
-
-    confirmPayment(id, paymentIdNum)
+    // Verificar estado real del pago contra MP usando el endpoint de verificación
+    verifyPayment(id)
       .then((res) => {
         if (res.estado === "aprobado") {
           setResult({ ok: true, msg: "Pago aprobado correctamente." });
@@ -33,13 +32,23 @@ export default function OrderRedirectPage() {
       });
   }, [id]);
 
+  // Auto-redirect a /pedido/{id} después de 3 segundos
+  useEffect(() => {
+    if (result) {
+      const timer = setTimeout(() => {
+        navigate(`/pedido/${id}`, { replace: true });
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [result, id, navigate]);
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="w-full max-w-md rounded-xl bg-white p-8 text-center shadow-sm">
         {!result ? (
           <>
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-            <p className="text-gray-600">Verificando pago...</p>
+            <p className="text-gray-600">Verificando pago con MercadoPago...</p>
           </>
         ) : result.ok ? (
           <>
@@ -48,6 +57,7 @@ export default function OrderRedirectPage() {
             </div>
             <h1 className="mb-2 text-xl font-bold text-gray-900">Pago exitoso</h1>
             <p className="mb-6 text-gray-600">{result.msg}</p>
+            <p className="text-sm text-gray-400">Redirigiendo al pedido...</p>
           </>
         ) : (
           <>
@@ -56,23 +66,9 @@ export default function OrderRedirectPage() {
             </div>
             <h1 className="mb-2 text-xl font-bold text-gray-900">Error en el pago</h1>
             <p className="mb-6 text-gray-600">{result.msg}</p>
+            <p className="text-sm text-gray-400">Redirigiendo al pedido...</p>
           </>
         )}
-
-        <div className="flex justify-center gap-4">
-          <Link
-            to={id ? `/ventas/${id}` : "/ventas"}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Ver detalle del pedido
-          </Link>
-          <Link
-            to="/"
-            className="rounded-lg border border-gray-300 px-6 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
-          >
-            Ir al inicio
-          </Link>
-        </div>
       </div>
     </div>
   );

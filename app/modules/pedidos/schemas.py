@@ -69,6 +69,11 @@ class PedidoUpdate(SQLModel):
     notas: Optional[str] = Field(default=None, max_length=500)
 
 
+class CambiarDireccionPedidoInput(SQLModel):
+    """Input para cambiar la dirección de entrega de un pedido"""
+    direccion_entrega_id: int = Field(ge=1)
+
+
 class PedidoPublic(SQLModel):
     id: int
     usuario_id: int

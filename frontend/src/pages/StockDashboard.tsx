@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export function StockDashboard(): JSX.Element {
   return (
     <div className="space-y-4">
@@ -7,18 +9,18 @@ export function StockDashboard(): JSX.Element {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <a href="/stock" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-green-50 to-green-100 p-6 shadow-md transition hover:shadow-lg hover:border-green-200">
+        <Link to="/stock" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-green-50 to-green-100 p-6 shadow-md transition hover:shadow-lg hover:border-green-200">
           <h2 className="mb-2 text-2xl font-bold text-green-900">📦 Stock</h2>
           <p className="text-green-800">Gestioná productos e ingredientes, actualizá cantidades y disponibilidad.</p>
-        </a>
-        <a href="/productos" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-blue-50 to-blue-100 p-6 shadow-md transition hover:shadow-lg hover:border-blue-200">
+        </Link>
+        <Link to="/productos" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-blue-50 to-blue-100 p-6 shadow-md transition hover:shadow-lg hover:border-blue-200">
           <h2 className="mb-2 text-2xl font-bold text-blue-900">🛍️ Productos</h2>
           <p className="text-blue-800">Visualizá y editá productos, precios e ingredientes.</p>
-        </a>
-        <a href="/ingredientes" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-purple-50 to-purple-100 p-6 shadow-md transition hover:shadow-lg hover:border-purple-200">
+        </Link>
+        <Link to="/ingredientes" className="rounded-2xl border border-orange-100 bg-gradient-to-br from-purple-50 to-purple-100 p-6 shadow-md transition hover:shadow-lg hover:border-purple-200">
           <h2 className="mb-2 text-2xl font-bold text-purple-900">🧂 Ingredientes</h2>
           <p className="text-purple-800">Visualizá y editá ingredientes, unidades y costos.</p>
-        </a>
+        </Link>
       </div>
 
       <div className="mt-8 rounded-lg border border-green-100 bg-green-50 p-6">

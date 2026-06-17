@@ -107,7 +107,7 @@ def main() -> None:
         ingrediente_service = IngredienteService(session)
         producto_service = ProductoService(session)
 
-        pizzas = upsert_categoria(categoria_service, session, "Pizzas", "Categoría principal de pizzas", 1, None)
+        pizzas_id = upsert_categoria(categoria_service, session, "Pizzas", "Categoría principal de pizzas", 1, None).id
         bebidas = upsert_categoria(categoria_service, session, "Bebidas", "Bebidas frías y sin alcohol", 2, None)
         especiales = upsert_categoria(categoria_service, session, "Pizzas especiales", "Pizzas con variantes especiales", 3, pizzas_id)
         tradicionales = upsert_categoria(categoria_service, session, "Pizzas tradicionales", "Recetas clásicas", 4, pizzas_id)

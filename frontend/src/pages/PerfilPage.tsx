@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import {
   createDireccionUsuario,
+  deleteDireccionUsuario,
   getUsuario,
   listDireccionesUsuario,
   updateDireccionUsuario,
@@ -167,6 +168,16 @@ export function PerfilPage(): JSX.Element {
     onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "No se pudo guardar la dirección";
       window.alert(message);
+    },
+  });
+
+  const deleteDireccionMutation = useMutation({
+    mutationFn: async (direccionId: number) => {
+      if (!user) throw new Error("Usuario no autenticado");
+      return deleteDireccionUsuario(user.id, direccionId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["perfil-direcciones", user?.id] });
     },
   });
 
@@ -388,6 +399,17 @@ export function PerfilPage(): JSX.Element {
                     className="rounded bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
                   >
                     Editar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm(`¿Eliminar "${direccion.alias}"?`)) {
+                        deleteDireccionMutation.mutate(direccion.id);
+                      }
+                    }}
+                    className="rounded bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+                  >
+                    Eliminar
                   </button>
                 </div>
               </article>

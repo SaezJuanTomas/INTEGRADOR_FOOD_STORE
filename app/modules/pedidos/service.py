@@ -7,12 +7,15 @@ from sqlmodel import Session
 
 from app.core.rbac import (
     ROLE_ADMIN,
+    ROLE_CLIENT,
     ROLE_PEDIDOS,
     STATE_CANCELADO,
-    STATE_CONFIRMADO,
-    STATE_EN_PREP,
+    STATE_PAGADO,
+    STATE_EN_PREPARACION,
+    STATE_TERMINADO,
     STATE_ENTREGADO,
     STATE_PENDIENTE,
+    is_terminal,
     normalize_role,
     normalize_state,
 )
@@ -52,16 +55,17 @@ class PedidoService:
     """
 
     TRANSICIONES_VALIDAS = {
-        STATE_PENDIENTE: [STATE_CONFIRMADO, STATE_CANCELADO],
-        STATE_CONFIRMADO: [STATE_EN_PREP, STATE_CANCELADO],
-        STATE_EN_PREP: [STATE_ENTREGADO, STATE_CANCELADO],
+        STATE_PENDIENTE: [STATE_PAGADO, STATE_CANCELADO],
+        STATE_PAGADO: [STATE_EN_PREPARACION, STATE_CANCELADO],
+        STATE_EN_PREPARACION: [STATE_TERMINADO, STATE_CANCELADO],
+        STATE_TERMINADO: [STATE_ENTREGADO],
         STATE_ENTREGADO: [],
         STATE_CANCELADO: [],
     }
 
     TRANSICIONES_STOCK = {
-        (STATE_CONFIRMADO, STATE_CANCELADO): "restore",
-        (STATE_EN_PREP, STATE_CANCELADO): "restore",
+        (STATE_PAGADO, STATE_CANCELADO): "restore",
+        (STATE_EN_PREPARACION, STATE_CANCELADO): "restore",
     }
 
     def _aplicar_stock(
@@ -71,8 +75,9 @@ class PedidoService:
 
     EVENTOS_WS = {
         STATE_PENDIENTE: "PEDIDO_CREADO",
-        STATE_CONFIRMADO: "PEDIDO_CONFIRMADO",
-        STATE_EN_PREP: "PEDIDO_EN_PREP",
+        STATE_PAGADO: "PEDIDO_PAGADO",
+        STATE_EN_PREPARACION: "PEDIDO_EN_PREPARACION",
+        STATE_TERMINADO: "PEDIDO_TERMINADO",
         STATE_ENTREGADO: "PEDIDO_ENTREGADO",
         STATE_CANCELADO: "PEDIDO_CANCELADO",
     }
@@ -188,12 +193,12 @@ class PedidoService:
                 estado_codigo=pedido.estado_codigo,
                 total=pedido.total,
                 detalles=[self._detalle_to_public(d) for d in detalles],
-                mensaje="Pedido creado. Pendiente de confirmar por el administrador.",
+                mensaje="Pedido creado. Pendiente de pago.",
             )
         return response
 
     # ========================================================================
-    # CONFIRMAR PEDIDO
+    # CONFIRMAR PEDIDO (PENDIENTE → PAGADO)
     # ========================================================================
 
     async def confirmar_pedido(self, usuario_id: int, pedido_id: int, forma_pago_codigo: str | None = None) -> ConfirmarPedidoResponse:
@@ -209,7 +214,7 @@ class PedidoService:
                     detail=f"Pedido en estado {pedido.estado_codigo}, no puede confirmarse",
                 )
 
-            if STATE_CONFIRMADO not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
+            if STATE_PAGADO not in self.TRANSICIONES_VALIDAS.get(pedido.estado_codigo, []):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Transición de estado no permitida",
@@ -220,15 +225,15 @@ class PedidoService:
                 self._aplicar_stock(uow, detalle.producto_id, detalle.cantidad, multiplicador=1)
 
             pedido_anterior_codigo = pedido.estado_codigo
-            pedido.estado_codigo = STATE_CONFIRMADO
+            pedido.estado_codigo = STATE_PAGADO
             pedido = uow.pedidos.add(pedido)
 
             historial = HistorialEstadoPedido(
                 pedido_id=pedido_id,
                 estado_desde_codigo=pedido_anterior_codigo,
-                estado_hacia_codigo=STATE_CONFIRMADO,
+                estado_hacia_codigo=STATE_PAGADO,
                 usuario_id=usuario_id,
-                motivo="Pedido confirmado por usuario",
+                motivo="Pedido confirmado",
                 fecha=datetime.now(timezone.utc),
             )
             uow.historial.add(historial)
@@ -244,6 +249,39 @@ class PedidoService:
 
         await self._broadcast_event(response.estado_codigo, bc_public)
         return response
+
+    # ========================================================================
+    # CAMBIAR DIRECCIÓN DE ENTREGA
+    # ========================================================================
+
+    def cambiar_direccion(
+        self, usuario_id: int, pedido_id: int, nueva_direccion_id: int
+    ) -> PedidoDetail:
+        with PedidoUnitOfWork(self._session) as uow:
+            pedido = uow.pedidos.get_by_id(pedido_id)
+            if not pedido or pedido.usuario_id != usuario_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Pedido no encontrado",
+                )
+            if pedido.estado_codigo != STATE_PENDIENTE:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="No se puede cambiar la dirección de un pedido que no está pendiente",
+                )
+
+            direccion = uow.direcciones.get_by_id_and_usuario(nueva_direccion_id, usuario_id)
+            if not direccion:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Dirección de entrega no encontrada",
+                )
+
+            pedido.direccion_entrega_id = nueva_direccion_id
+            pedido.updated_at = datetime.now(timezone.utc)
+            uow.pedidos.add(pedido)
+
+        return self.get_pedido(usuario_id, pedido_id, [ROLE_CLIENT])
 
     # ========================================================================
     # CANCELAR PEDIDO
@@ -267,9 +305,9 @@ class PedidoService:
                     detail="Solo puedes cancelar pedidos en estado PENDIENTE",
                 )
 
-            estados_cancelables = [STATE_PENDIENTE, STATE_CONFIRMADO]
+            estados_cancelables = [STATE_PENDIENTE, STATE_PAGADO]
             if self._can_manage_all(roles):
-                estados_cancelables.append(STATE_EN_PREP)
+                estados_cancelables.append(STATE_EN_PREPARACION)
 
             if pedido.estado_codigo not in estados_cancelables:
                 raise HTTPException(
@@ -277,7 +315,7 @@ class PedidoService:
                     detail=f"No se puede cancelar pedido en estado {pedido.estado_codigo}",
                 )
 
-            if pedido.estado_codigo in [STATE_CONFIRMADO, STATE_EN_PREP]:
+            if pedido.estado_codigo in [STATE_PAGADO, STATE_EN_PREPARACION]:
                 detalles = uow.detalles.get_by_pedido_id(pedido_id)
                 for detalle in detalles:
                     self._aplicar_stock(uow, detalle.producto_id, detalle.cantidad, multiplicador=-1)
@@ -318,6 +356,12 @@ class PedidoService:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Pedido no encontrado",
+                )
+
+            if is_terminal(pedido.estado_codigo):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"No se puede modificar un pedido en estado {pedido.estado_codigo}",
                 )
 
             estado_destino_codigo = normalize_state(data.estado_codigo)

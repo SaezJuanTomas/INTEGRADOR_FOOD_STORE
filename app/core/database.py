@@ -106,6 +106,74 @@ def _migrate_legacy_schema() -> None:
             connection, "pedidos", "forma_pago_codigo", "forma_pago_codigo VARCHAR(50)"
         )
 
+    # Migrar estados legacy en transacción separada con commit explícito
+    # (engine.connect() no hace commit automático, y el seed necesita ver estos cambios)
+    with engine.begin() as conn:
+        _migrate_estado_pedido(conn, "CONFIRMADO", "PAGADO")
+        _migrate_estado_pedido(conn, "EN_PREP", "EN_PREPARACION")
+        _migrate_estado_pedido(conn, "PREPARANDO", "EN_PREPARACION")
+        _migrate_estado_pedido(conn, "EN_CAMINO", "EN_PREPARACION")
+
+
+_ESTADO_INFO = {
+    "PENDIENTE": ("Pendiente", "Pedido creado, aguardando pago"),
+    "PAGADO": ("Pagado", "Pedido pagado, pendiente de preparación"),
+    "EN_PREPARACION": ("En Preparación", "Pedido en preparación"),
+    "TERMINADO": ("Terminado", "Pedido terminado, listo para entregar"),
+    "ENTREGADO": ("Entregado", "Pedido entregado al cliente"),
+    "CANCELADO": ("Cancelado", "Pedido cancelado"),
+}
+
+
+def _migrate_estado_pedido(connection, old_codigo: str, new_codigo: str) -> None:
+    """Migrar pedidos e historiales de un estado antiguo a uno nuevo.
+
+    También asegura que el estado nuevo exista en la tabla estados_pedido.
+    """
+    inspector = inspect(connection)
+    for table in ("pedidos", "historiales_estado_pedido"):
+        if table not in inspector.get_table_names():
+            continue
+        columns = {c["name"] for c in inspector.get_columns(table)}
+        col = "estado_codigo" if table == "pedidos" else "estado_desde_codigo"
+        if col in columns:
+            connection.execute(
+                text(f"UPDATE {table} SET {col} = :new WHERE {col} = :old").bindparams(
+                    new=new_codigo, old=old_codigo
+                )
+            )
+        col2 = "estado_hacia_codigo" if table == "historiales_estado_pedido" else None
+        if col2 and col2 in columns:
+            connection.execute(
+                text(f"UPDATE {table} SET {col2} = :new WHERE {col2} = :old").bindparams(
+                    new=new_codigo, old=old_codigo
+                )
+            )
+
+    # Asegurar que el estado nuevo exista en estados_pedido
+    if "estados_pedido" in inspector.get_table_names():
+        info = _ESTADO_INFO.get(new_codigo, (new_codigo, ""))
+        if _is_postgres:
+            connection.execute(
+                text(
+                    "INSERT INTO estados_pedido (codigo, nombre, descripcion) "
+                    "VALUES (:codigo, :nombre, :descripcion) ON CONFLICT (codigo) DO NOTHING"
+                ).bindparams(codigo=new_codigo, nombre=info[0], descripcion=info[1])
+            )
+        else:
+            connection.execute(
+                text(
+                    "INSERT OR IGNORE INTO estados_pedido (codigo, nombre, descripcion) "
+                    "VALUES (:codigo, :nombre, :descripcion)"
+                ).bindparams(codigo=new_codigo, nombre=info[0], descripcion=info[1])
+            )
+
+    # Eliminar estado antiguo si existe en estados_pedido
+    if "estados_pedido" in inspector.get_table_names():
+        connection.execute(
+            text("DELETE FROM estados_pedido WHERE codigo = :old").bindparams(old=old_codigo)
+        )
+
 
 def get_session():
     with Session(engine) as session:

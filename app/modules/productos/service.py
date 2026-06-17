@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from math import floor
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from sqlmodel import Session
 
-from app.models import Producto
+from app.core.websocket import manager
+from app.models import Categoria, Producto
 from app.modules.catalogo.unit_of_work import CatalogUnitOfWork
 from app.modules.productos.schemas import (
     ProductoCreate,
@@ -29,6 +30,9 @@ class ProductoService:
 
     def _is_active_product(self, producto: Producto) -> bool:
         return bool(producto.activo) and producto.deleted_at is None
+
+    async def _broadcast_event(self, event_type: str, data: dict[str, Any]) -> None:
+        await manager.broadcast(event_type, data)
 
     def _is_active_category(self, categoria) -> bool:
         return categoria is not None and bool(categoria.activo) and categoria.deleted_at is None
@@ -191,6 +195,16 @@ class ProductoService:
 
         return result
 
+    def _collect_category_ids(self, categoria_id: int, categorias_repo) -> list[int]:
+        """Recolecta el ID de la categoría y todos sus descendientes recursivamente."""
+        categoria = categorias_repo.get_by_id(categoria_id)
+        if categoria is None:
+            return [categoria_id]
+        ids = [categoria.id]
+        for sub in categoria.subcategorias:
+            ids.extend(self._collect_category_ids(sub.id, categorias_repo))
+        return ids
+
     def get_public(
         self,
         offset: int = 0,
@@ -202,10 +216,11 @@ class ProductoService:
         with CatalogUnitOfWork(self._session) as uow:
             items = uow.productos.get_disponibles(offset=0, limit=10000)
             if categoria_id is not None:
+                ids = self._collect_category_ids(categoria_id, uow.categorias)
                 items = [
                     item
                     for item in items
-                    if any(rel.categoria_id == categoria_id for rel in item.productos_categorias)
+                    if any(rel.categoria_id in ids for rel in item.productos_categorias)
                 ]
             if q:
                 q_lower = q.strip().lower()
@@ -238,10 +253,11 @@ class ProductoService:
             else:
                 items = uow.productos.get_active_paginated(offset=0, limit=10000)
                 if categoria_id is not None:
+                    ids = self._collect_category_ids(categoria_id, uow.categorias)
                     items = [
                         item
                         for item in items
-                        if any(rel.categoria_id == categoria_id for rel in item.productos_categorias)
+                        if any(rel.categoria_id in ids for rel in item.productos_categorias)
                     ]
                 if disponible is not None:
                     items = [item for item in items if item.disponible is disponible]
@@ -261,7 +277,7 @@ class ProductoService:
             data = [self._to_public(item) for item in items]
         return ProductoList(data=data, total=total)
 
-    def update_disponibilidad(self, producto_id: int, disponible: bool) -> ProductoPublic:
+    async def update_disponibilidad(self, producto_id: int, disponible: bool) -> ProductoPublic:
         with CatalogUnitOfWork(self._session) as uow:
             producto = uow.productos.get_by_id(producto_id)
             if producto is None or not self._is_active_product(producto):
@@ -272,9 +288,10 @@ class ProductoService:
             uow.productos.add(producto)
             result = self._to_public(producto)
 
+        await self._broadcast_event("PRODUCTO_UPDATED", {"producto_id": producto_id, "data": result.model_dump()})
         return result
 
-    def update_stock_manual(self, producto_id: int, stock_cantidad: int) -> ProductoPublic:
+    async def update_stock_manual(self, producto_id: int, stock_cantidad: int) -> ProductoPublic:
         with CatalogUnitOfWork(self._session) as uow:
             producto = uow.productos.get_by_id(producto_id)
             if producto is None or not self._is_active_product(producto):
@@ -288,6 +305,7 @@ class ProductoService:
             uow.productos.add(producto)
             result = self._to_public(producto)
 
+        await self._broadcast_event("PRODUCTO_UPDATED", {"producto_id": producto_id, "data": result.model_dump()})
         return result
 
     def get_by_id(self, producto_id: int) -> ProductoPublic:
@@ -299,7 +317,7 @@ class ProductoService:
             result = self._to_public(producto)
         return result
 
-    def update(self, producto_id: int, data: ProductoUpdate) -> ProductoPublic:
+    async def update(self, producto_id: int, data: ProductoUpdate) -> ProductoPublic:
         """Actualizar producto."""
         with CatalogUnitOfWork(self._session) as uow:
             producto = uow.productos.get_by_id(producto_id)
@@ -333,7 +351,6 @@ class ProductoService:
                 uow.productos.set_ingredientes(producto.id, ingredientes_data)
 
             if producto.usa_stock_manual:
-                # Keep data consistent when product operates with manual stock.
                 uow.productos.set_ingredientes(producto.id, [])
 
             producto.updated_at = datetime.now(timezone.utc)
@@ -342,6 +359,7 @@ class ProductoService:
             uow._session.refresh(producto)
             result = self._to_public(producto)
 
+        await self._broadcast_event("PRODUCTO_UPDATED", {"producto_id": producto_id, "data": result.model_dump()})
         return result
 
     def soft_delete(self, producto_id: int) -> None:
